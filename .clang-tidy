@@ -1,0 +1,12 @@
+Checks: >
+  clang-analyzer-*,
+  bugprone-*,performance-*,
+  portability-*,
+  modernize-*,
+  -modernize-use-trailing-return-type,
+  -portability-avoid-pragma-once,
+  -bugprone-easily-swappable-parameters
+
+WarningsAsErrors: ''
+
+HeaderFilterRegex: '^(src|include|tests)/'
