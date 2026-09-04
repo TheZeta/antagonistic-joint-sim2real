@@ -9,10 +9,12 @@ project(
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 add_library(
     atj_model
     src/joint_model.cpp
+    src/integrator.cpp
 )
 
 target_include_directories(
@@ -44,6 +46,21 @@ target_link_libraries(
 add_test(
     NAME joint_model
     COMMAND test_joint_model
+)
+
+add_executable(
+    test_integrator
+    tests/test_integrator.cpp
+)
+
+target_link_libraries(
+    test_integrator
+    PRIVATE atj_model
+)
+
+add_test(
+    NAME integrator
+    COMMAND test_integrator
 )
 
 add_executable(
