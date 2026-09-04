@@ -1,31 +1,12 @@
 #include "atj/integrator.hpp"
 #include "atj/joint_model.hpp"
 
-#include <cmath>
-#include <cstdlib>
-#include <iomanip>
-#include <iostream>
-#include <string>
+#include <catch2/catch_approx.hpp>
+#include <catch2/catch_test_macros.hpp>
 
 namespace {
 
-constexpr double tolerance = 1e-10;
-
-bool near(double actual, double expected, double tol = tolerance) {
-    return std::abs(actual - expected) <= tol;
-}
-
-void expect_near(double actual, double expected, double tolerance_value,
-                 const std::string& description) {
-    if (!near(actual, expected, tolerance_value)) {
-        std::cerr << std::setprecision(15);
-        std::cerr << "FAILED: " << description << '\n'
-                  << " expected:  " << expected << '\n'
-                  << " actual:    " << actual << '\n';
-
-        std::exit(EXIT_FAILURE);
-    }
-}
+constexpr double tolerance = 1e-9;
 
 atj::Parameters default_parameters() {
     return atj::Parameters{.inertia = 0.01,
@@ -36,7 +17,9 @@ atj::Parameters default_parameters() {
                            .preload = 0.01};
 }
 
-void test_euler_first_step() {
+} // namespace
+
+TEST_CASE("Euler integration produces expected first step") {
     const atj::JointModel model(default_parameters());
 
     const atj::State initial_state{.q = 0.0, .q_dot = 0.0};
@@ -47,12 +30,12 @@ void test_euler_first_step() {
 
     const atj::State result = atj::euler_step(model, initial_state, input, dt);
 
-    expect_near(result.q, 0.0, tolerance, "Euler first-step position");
+    REQUIRE(result.q == Catch::Approx(0.0).margin(tolerance));
 
-    expect_near(result.q_dot, 0.04, tolerance, "Euler first-step velocity");
+    REQUIRE(result.q_dot == Catch::Approx(0.04).margin(tolerance));
 }
 
-void test_equilibrium_remains_equilibrium() {
+TEST_CASE("Numerical integrators preserve static equilibrium") {
     const atj::JointModel model(default_parameters());
 
     const atj::State equilibrium{.q = 0.25, .q_dot = 0.0};
@@ -65,16 +48,20 @@ void test_equilibrium_remains_equilibrium() {
 
     const atj::State rk4_result = atj::rk4_step(model, equilibrium, input, dt);
 
-    expect_near(euler_result.q, 0.25, tolerance, "Euler equilibrium position");
+    SECTION("Euler") {
+        REQUIRE(euler_result.q == Catch::Approx(0.25).margin(tolerance));
 
-    expect_near(euler_result.q_dot, 0.0, tolerance, "Euler equilibrium velocity");
+        REQUIRE(euler_result.q_dot == Catch::Approx(0.0).margin(tolerance));
+    }
 
-    expect_near(rk4_result.q, 0.25, tolerance, "RK4 equilibrium position");
+    SECTION("RK4") {
+        REQUIRE(rk4_result.q == Catch::Approx(0.25).margin(tolerance));
 
-    expect_near(rk4_result.q_dot, 0.0, tolerance, "RK4 equilibrium velocity");
+        REQUIRE(rk4_result.q_dot == Catch::Approx(0.0).margin(tolerance));
+    }
 }
 
-void test_rk4_against_analytical_solution() {
+TEST_CASE("RK4 matches analytical solution at one second") {
     const atj::JointModel model(default_parameters());
 
     atj::State state{.q = 0.0, .q_dot = 0.0};
@@ -88,20 +75,7 @@ void test_rk4_against_analytical_solution() {
         state = atj::rk4_step(model, state, input, dt);
     }
 
-    // Analytical position at t = 1.0 s for Model v0.
-    constexpr double expected_q = 0.3343086493333882;
+    constexpr double analytical_q = 0.33430864933338816;
 
-    expect_near(state.q, expected_q, 1e-10, "RK4 position at t = 1 second");
-}
-
-} // namespace
-
-int main() {
-    test_euler_first_step();
-    test_equilibrium_remains_equilibrium();
-    test_rk4_against_analytical_solution();
-
-    std::cout << "All integrator tests passed.\n";
-
-    return EXIT_SUCCESS;
+    REQUIRE(state.q == Catch::Approx(analytical_q).margin(1e-10));
 }

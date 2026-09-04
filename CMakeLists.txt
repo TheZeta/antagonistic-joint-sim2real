@@ -11,6 +11,30 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+include(FetchContent)
+
+set(
+    FETCHCONTENT_TRY_FIND_PACKAGE_MODE
+    NEVER
+)
+
+FetchContent_Declare(
+    Catch2
+    GIT_REPOSITORY https://github.com/catchorg/Catch2.git
+    GIT_TAG v3.15.3
+    GIT_SHALLOW TRUE
+)
+
+FetchContent_MakeAvailable(Catch2)
+
+list(
+    APPEND CMAKE_MODULE_PATH
+    ${catch2_SOURCE_DIR}/extras
+)
+
+include(CTest)
+include(Catch)
+
 add_library(
     atj_model
     src/joint_model.cpp
@@ -31,37 +55,29 @@ target_compile_options(
         -Wconversion
 )
 
-enable_testing()
-
 add_executable(
-    test_joint_model
+    atj_tests
     tests/test_joint_model.cpp
-)
-
-target_link_libraries(
-    test_joint_model
-    PRIVATE atj_model
-)
-
-add_test(
-    NAME joint_model
-    COMMAND test_joint_model
-)
-
-add_executable(
-    test_integrator
     tests/test_integrator.cpp
 )
 
 target_link_libraries(
-    test_integrator
-    PRIVATE atj_model
+    atj_tests
+    PRIVATE 
+        atj_model
+        Catch2::Catch2WithMain
 )
 
-add_test(
-    NAME integrator
-    COMMAND test_integrator
+target_compile_options(
+    atj_tests
+    PRIVATE
+        -Wall
+        -Wextra
+        -Wpedantic
+        -Wconversion
 )
+
+catch_discover_tests(atj_tests)
 
 add_executable(
     simulate_step
@@ -71,4 +87,13 @@ add_executable(
 target_link_libraries(
     simulate_step
     PRIVATE atj_model
+)
+
+target_compile_options(
+    simulate_step
+    PRIVATE
+        -Wall
+        -Wextra
+        -Wpedantic
+        -Wconversion
 )
