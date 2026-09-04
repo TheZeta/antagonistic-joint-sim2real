@@ -1,2 +1,5 @@
 build/
-*.csv
+.venv/
+
+results/*.csv
+results/*.png

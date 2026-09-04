@@ -97,3 +97,22 @@ target_compile_options(
         -Wpedantic
         -Wconversion
 )
+
+add_executable(
+    validate_open_loop
+    apps/validate_open_loop.cpp
+)
+
+target_link_libraries(
+    validate_open_loop
+    PRIVATE atj_model
+)
+
+target_compile_options(
+    validate_open_loop
+    PRIVATE
+        -Wall
+        -Wextra
+        -Wpedantic
+        -Wconversion
+)
