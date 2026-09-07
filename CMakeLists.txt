@@ -135,3 +135,22 @@ target_compile_options(
         -Wpedantic
         -Wconversion
 )
+
+add_executable(
+    sweep_damping
+    apps/sweep_damping.cpp
+)
+
+target_link_libraries(
+    sweep_damping
+    PRIVATE atj_model
+)
+
+target_compile_options(
+    sweep_damping
+    PRIVATE
+        -Wall
+        -Wextra
+        -Wpedantic
+        -Wconversion
+)
