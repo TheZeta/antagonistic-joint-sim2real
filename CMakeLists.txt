@@ -154,3 +154,22 @@ target_compile_options(
         -Wpedantic
         -Wconversion
 )
+
+add_executable(
+    sweep_stiffness
+    apps/sweep_stiffness.cpp
+)
+
+target_link_libraries(
+    sweep_stiffness
+    PRIVATE atj_model
+)
+
+target_compile_options(
+    sweep_stiffness
+    PRIVATE
+        -Wall
+        -Wextra
+        -Wpedantic
+        -Wconversion
+)
