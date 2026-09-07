@@ -116,3 +116,22 @@ target_compile_options(
         -Wpedantic
         -Wconversion
 )
+
+add_executable(
+    sweep_inertia
+    apps/sweep_inertia.cpp
+)
+
+target_link_libraries(
+    sweep_inertia
+    PRIVATE atj_model
+)
+
+target_compile_options(
+    sweep_inertia
+    PRIVATE
+        -Wall
+        -Wextra
+        -Wpedantic
+        -Wconversion
+)
