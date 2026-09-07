@@ -173,3 +173,22 @@ target_compile_options(
         -Wpedantic
         -Wconversion
 )
+
+add_executable(
+    sweep_preload
+    apps/sweep_preload.cpp
+)
+
+target_link_libraries(
+    sweep_preload
+    PRIVATE atj_model
+)
+
+target_compile_options(
+    sweep_preload
+    PRIVATE
+        -Wall
+        -Wextra
+        -Wpedantic
+        -Wconversion
+)
