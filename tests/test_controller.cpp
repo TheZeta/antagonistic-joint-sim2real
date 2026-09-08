@@ -87,3 +87,37 @@ TEST_CASE("P-controlled predicted equilibrium has zero plant acceleration") {
 
     REQUIRE(derivative.q_ddot == Catch::Approx(0.0).margin(tolerance));
 }
+
+TEST_CASE("PD controller combines position and velocity feedback") {
+    const atj::PositionPDController controller(8.0, 3.0);
+
+    SECTION("Zero state error and velocity produce zero command") {
+        const atj::State state{.q = 0.20, .q_dot = 0.0};
+
+        REQUIRE(controller.differential_command(0.20, state) ==
+                Catch::Approx(0.0).margin(tolerance));
+    }
+
+    SECTION("Derivative feedback opposes positive velocity") {
+        const atj::State state{.q = 0.10, .q_dot = 0.20};
+
+        /*
+         * Position contribution:
+         * 8 * (0.20 - 0.10) = 0.8
+         *
+         * Derivative contribution:
+         * -3 * 0.20 = -0.6
+         *
+         * Total = 0.2
+         */
+        REQUIRE(controller.differential_command(0.20, state) ==
+                Catch::Approx(0.20).margin(tolerance));
+    }
+
+    SECTION("Negative velocity increases positive corrective command") {
+        const atj::State state{.q = 0.10, .q_dot = -0.20};
+
+        REQUIRE(controller.differential_command(0.20, state) ==
+                Catch::Approx(1.40).margin(tolerance));
+    }
+}
