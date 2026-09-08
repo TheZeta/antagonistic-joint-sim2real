@@ -281,3 +281,24 @@ target_compile_options(
         -Wpedantic
         -Wconversion
 )
+
+add_executable(
+    sweep_model_mismatch
+    apps/sweep_model_mismatch.cpp
+)
+
+target_link_libraries(
+    sweep_model_mismatch
+    PRIVATE
+        atj_model
+        atj_control
+)
+
+target_compile_options(
+    sweep_model_mismatch
+    PRIVATE
+        -Wall
+        -Wextra
+        -Wpedantic
+        -Wconversion
+)

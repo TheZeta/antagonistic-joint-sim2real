@@ -81,8 +81,8 @@ int main() {
            << "q_rk4_rad,"
            << "q_analytical_rad,"
            << "q_error_rad,"
-           << "qdot_rk4_rad_s"
-           << "qdot_analytical_rad_s"
+           << "qdot_rk4_rad_s,"
+           << "qdot_analytical_rad_s,"
            << "qdot_error_rad_s" << '\n';
 
     double max_q_error = 0.0;
