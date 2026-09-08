@@ -59,12 +59,14 @@ add_executable(
     atj_tests
     tests/test_joint_model.cpp
     tests/test_integrator.cpp
+    tests/test_controller.cpp
 )
 
 target_link_libraries(
     atj_tests
     PRIVATE 
         atj_model
+        atj_control
         Catch2::Catch2WithMain
 )
 
@@ -186,6 +188,51 @@ target_link_libraries(
 
 target_compile_options(
     sweep_preload
+    PRIVATE
+        -Wall
+        -Wextra
+        -Wpedantic
+        -Wconversion
+)
+
+add_library(
+    atj_control
+    src/controller.cpp
+)
+
+target_include_directories(
+    atj_control
+    PUBLIC include
+)
+
+target_link_libraries(
+    atj_control
+    PUBLIC atj_model
+)
+
+target_compile_options(
+    atj_control
+    PRIVATE
+        -Wall
+        -Wextra
+        -Wpedantic
+        -Wconversion
+)
+
+add_executable(
+    simulate_p_control
+    apps/simulate_p_control.cpp
+)
+
+target_link_libraries(
+    simulate_p_control
+    PRIVATE
+        atj_model
+        atj_control
+)
+
+target_compile_options(
+    simulate_p_control
     PRIVATE
         -Wall
         -Wextra
