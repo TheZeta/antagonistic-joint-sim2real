@@ -260,3 +260,24 @@ target_compile_options(
         -Wpedantic
         -Wconversion
 )
+
+add_executable(
+    simulate_pd_feedforward_control
+    apps/simulate_pd_feedforward_control.cpp
+)
+
+target_link_libraries(
+    simulate_pd_feedforward_control
+    PRIVATE
+        atj_model
+        atj_control
+)
+
+target_compile_options(
+    simulate_pd_feedforward_control
+    PRIVATE
+        -Wall
+        -Wextra
+        -Wpedantic
+        -Wconversion
+)

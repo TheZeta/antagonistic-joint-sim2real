@@ -121,3 +121,32 @@ TEST_CASE("PD controller combines position and velocity feedback") {
                 Catch::Approx(1.40).margin(tolerance));
     }
 }
+
+TEST_CASE("Equilibrium feedforward command matches Model v0 geometry") {
+    const atj::Parameters parameters = default_parameters();
+
+    constexpr double q_reference = 20.0 * std::numbers::pi / 180.0;
+
+    const double theta_d = atj::equilibrium_differential_command(parameters, q_reference);
+
+    REQUIRE(theta_d == Catch::Approx(1.3962634015954636).margin(tolerance));
+}
+
+TEST_CASE("Equilibrium feedforward holds the requested joint position") {
+    const atj::Parameters parameters = default_parameters();
+
+    const atj::JointModel model(parameters);
+
+    constexpr double q_reference = 20.0 * std::numbers::pi / 180.0;
+
+    const double theta_d_feedforward =
+        atj::equilibrium_differential_command(parameters, q_reference);
+
+    const atj::State state{.q = q_reference, .q_dot = 0.0};
+
+    const atj::Input input = atj::make_antagonistic_input(theta_d_feedforward, 1.5);
+
+    const auto derivative = model.derivative(state, input);
+
+    REQUIRE(derivative.q_ddot == Catch::Approx(0.0).margin(tolerance));
+}

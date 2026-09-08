@@ -18,6 +18,9 @@ class PositionPController {
 [[nodiscard]]
 Input make_antagonistic_input(double differential_command, double common_mode);
 
+[[nodiscard]]
+double equilibrium_differential_command(const Parameters& parameters, double q_reference);
+
 class PositionPDController {
   public:
     PositionPDController(double kp, double kd);
@@ -29,4 +32,5 @@ class PositionPDController {
     double kp_;
     double kd_;
 };
+
 } // namespace atj

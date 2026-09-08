@@ -15,6 +15,10 @@ Input make_antagonistic_input(double differential_command, double common_mode) {
                  .theta_2 = common_mode - differential_command / 2.0};
 }
 
+double equilibrium_differential_command(const Parameters& parameters, double q_reference) {
+    return (2.0 * parameters.joint_radius / parameters.motor_radius) * q_reference;
+}
+
 PositionPDController::PositionPDController(double kp, double kd) : kp_(kp), kd_(kd) {}
 
 double PositionPDController::differential_command(double q_reference, const State& state) const {
