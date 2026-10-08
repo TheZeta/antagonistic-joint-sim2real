@@ -60,6 +60,8 @@ add_executable(
     tests/test_joint_model.cpp
     tests/test_integrator.cpp
     tests/test_controller.cpp
+    tests/test_h0_calibration.cpp
+    tests/test_h0_coordinates.cpp
 )
 
 target_link_libraries(
@@ -67,6 +69,7 @@ target_link_libraries(
     PRIVATE 
         atj_model
         atj_control
+        atj_h0
         Catch2::Catch2WithMain
 )
 
@@ -296,6 +299,31 @@ target_link_libraries(
 
 target_compile_options(
     sweep_model_mismatch
+    PRIVATE
+        -Wall
+        -Wextra
+        -Wpedantic
+        -Wconversion
+)
+
+add_library(
+    atj_h0
+    src/h0_calibration.cpp
+    src/h0_coordinates.cpp
+)
+
+target_include_directories(
+    atj_h0
+    PUBLIC include
+)
+
+target_link_libraries(
+    atj_h0
+    PUBLIC atj_model
+)
+
+target_compile_options(
+    atj_h0
     PRIVATE
         -Wall
         -Wextra
