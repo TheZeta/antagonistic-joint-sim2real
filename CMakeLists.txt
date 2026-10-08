@@ -62,6 +62,7 @@ add_executable(
     tests/test_controller.cpp
     tests/test_h0_calibration.cpp
     tests/test_h0_coordinates.cpp
+    tests/test_h0_safety.cpp
 )
 
 target_link_libraries(
@@ -310,6 +311,7 @@ add_library(
     atj_h0
     src/h0_calibration.cpp
     src/h0_coordinates.cpp
+    src/h0_safety.cpp
 )
 
 target_include_directories(
