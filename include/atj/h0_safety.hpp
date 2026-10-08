@@ -4,34 +4,34 @@
 
 namespace atj::h0 {
 
-enum class SafetyState { disabled, armed, moving, holding, fault };
+enum class SafetyState { disabled = 0, armed = 1, moving = 2, holding = 3, fault = 4 };
 
 enum class SafetyFault {
-    none,
+    none = 0,
 
-    invalid_state,
-    non_finite_measurement,
-    non_finite_target,
-    non_monotonic_time,
+    invalid_state = 1,
+    non_finite_measurement = 2,
+    non_finite_target = 3,
+    non_monotonic_time = 4,
 
-    joint_angle_limit,
+    joint_angle_limit = 5,
 
-    motor_1_displacement_limit,
-    motor_2_displacement_limit,
+    motor_1_displacement_limit = 6,
+    motor_2_displacement_limit = 7,
 
-    motor_1_command_step_limit,
-    motor_2_command_step_limit,
+    motor_1_command_step_limit = 8,
+    motor_2_command_step_limit = 9,
 
-    motor_1_direction_mismatch,
-    motor_2_direction_mismatch,
+    motor_1_direction_mismatch = 10,
+    motor_2_direction_mismatch = 11,
 
-    motor_1_no_motion,
-    motor_2_no_motion,
+    motor_1_no_motion = 12,
+    motor_2_no_motion = 13,
 
-    motor_1_tracking_error,
-    motor_2_tracking_error,
+    motor_1_tracking_error = 14,
+    motor_2_tracking_error = 15,
 
-    motion_timeout
+    motion_timeout = 16
 };
 
 struct SafetyLimits {

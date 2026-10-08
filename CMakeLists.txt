@@ -63,6 +63,7 @@ add_executable(
     tests/test_h0_calibration.cpp
     tests/test_h0_coordinates.cpp
     tests/test_h0_safety.cpp
+    tests/test_h0_protocol.cpp
 )
 
 target_link_libraries(
@@ -312,6 +313,7 @@ add_library(
     src/h0_calibration.cpp
     src/h0_coordinates.cpp
     src/h0_safety.cpp
+    src/h0_protocol.cpp
 )
 
 target_include_directories(
