@@ -64,6 +64,7 @@ add_executable(
     tests/test_h0_coordinates.cpp
     tests/test_h0_safety.cpp
     tests/test_h0_protocol.cpp
+    tests/test_h0_device.cpp
 )
 
 target_link_libraries(
@@ -314,6 +315,7 @@ add_library(
     src/h0_coordinates.cpp
     src/h0_safety.cpp
     src/h0_protocol.cpp
+    src/h0_device.cpp
 )
 
 target_include_directories(
