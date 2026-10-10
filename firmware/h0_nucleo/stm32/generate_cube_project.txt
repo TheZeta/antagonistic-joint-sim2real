@@ -1,0 +1,9 @@
+config load "/home/zeta/antagonistic-joint-sim2real/firmware/h0_nucleo/stm32/h0_nucleo.ioc"
+project name h0_nucleo
+project path "/home/zeta/antagonistic-joint-sim2real/firmware/h0_nucleo/stm32"
+project toolchain Makefile
+project compiler "GCC"
+project couplefilesbyip 1
+config save "/home/zeta/antagonistic-joint-sim2real/firmware/h0_nucleo/stm32/h0_nucleo.ioc"
+project generate
+exit

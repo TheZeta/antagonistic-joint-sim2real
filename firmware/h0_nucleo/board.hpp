@@ -22,11 +22,13 @@ void initialize_board();
  */
 void force_disable_drivers();
 
+void start_command_receiver();
+
 /*
  * Read one coherent sensor snapshot.
  */
 [[nodiscard]]
-atj::h0::RawHardwareSample read_hardware_sample();
+std::optional<atj::h0::RawHardwareSample> try_read_hardware_sample();
 
 /*
  * Return one complete received serial line when available.
