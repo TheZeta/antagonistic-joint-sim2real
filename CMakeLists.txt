@@ -65,6 +65,7 @@ add_executable(
     tests/test_h0_safety.cpp
     tests/test_h0_protocol.cpp
     tests/test_h0_device.cpp
+    tests/test_h0_limits.cpp
 )
 
 target_link_libraries(
