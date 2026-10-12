@@ -150,7 +150,7 @@ TEST_CASE("H0 DISABLE requires fresh baselines before next run") {
 }
 
 TEST_CASE("H0 single-motor authority accepts bounded Motor 1 WIND move") {
-    atj::h0::H0Device device(atj::h0::h0_safety_limits(), atj::h0::MotionAuthority::single_motor);
+    atj::h0::H0Device device(atj::h0::h0_safety_limits(), atj::h0::MotionAuthority::coordinated);
 
     const auto initial = initial_sample();
 
@@ -180,8 +180,8 @@ TEST_CASE("H0 single-motor authority accepts bounded Motor 1 WIND move") {
     REQUIRE(telemetry.motor_1_target_winding_counts == 5);
 }
 
-TEST_CASE("H0 initial powered authority rejects coordinated move") {
-    atj::h0::H0Device device(atj::h0::h0_safety_limits(), atj::h0::MotionAuthority::single_motor);
+TEST_CASE("H0 power authority accepts coordinated move") {
+    atj::h0::H0Device device(atj::h0::h0_safety_limits(), atj::h0::MotionAuthority::coordinated);
 
     device.ingest_sample(initial_sample());
 
@@ -194,14 +194,24 @@ TEST_CASE("H0 initial powered authority rejects coordinated move") {
                                     .motor_1_target_winding_counts = 5,
                                     .motor_2_target_winding_counts = -5};
 
-    REQUIRE(device.handle_command(move) ==
-            atj::h0::CommandDisposition::rejected_coordinated_motion);
+    REQUIRE(device.handle_command(move) == atj::h0::CommandDisposition::accepted);
 
-    REQUIRE(device.make_telemetry().state == atj::h0::SafetyState::armed);
+    const auto drive = device.drive_command();
+
+    REQUIRE(drive.has_value());
+
+    REQUIRE(drive->motor_1 == atj::h0::MotorDriveDirection::wind);
+    REQUIRE(drive->motor_2 == atj::h0::MotorDriveDirection::unwind);
+
+    const auto telemetry = device.make_telemetry();
+
+    REQUIRE(telemetry.state == atj::h0::SafetyState::moving);
+    REQUIRE(telemetry.motor_1_target_winding_counts == 5);
+    REQUIRE(telemetry.motor_2_target_winding_counts == -5);
 }
 
 TEST_CASE("H0 correct encoder motion reaches holding") {
-    atj::h0::H0Device device(atj::h0::h0_safety_limits(), atj::h0::MotionAuthority::single_motor);
+    atj::h0::H0Device device(atj::h0::h0_safety_limits(), atj::h0::MotionAuthority::coordinated);
 
     const auto initial = initial_sample();
 
@@ -240,7 +250,7 @@ TEST_CASE("H0 correct encoder motion reaches holding") {
 }
 
 TEST_CASE("H0 wrong encoder direction faults after one sample") {
-    atj::h0::H0Device device(atj::h0::h0_safety_limits(), atj::h0::MotionAuthority::single_motor);
+    atj::h0::H0Device device(atj::h0::h0_safety_limits(), atj::h0::MotionAuthority::coordinated);
 
     const auto initial = initial_sample();
 

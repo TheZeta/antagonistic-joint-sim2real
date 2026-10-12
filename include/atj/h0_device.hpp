@@ -21,11 +21,10 @@ enum class CommandDisposition {
     accepted,
     rejected_no_sample,
     rejected_motion_inhibited,
-    rejected_coordinated_motion,
     rejected_by_safety
 };
 
-enum class MotionAuthority { inhibited, single_motor };
+enum class MotionAuthority { inhibited, coordinated };
 
 class H0Device {
   public:

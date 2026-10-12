@@ -103,22 +103,6 @@ CommandDisposition H0Device::handle_command(const HostCommand& command) {
             return CommandDisposition::rejected_no_sample;
         }
 
-        /*
-         * Phase 1:
-         *
-         * at most one motor may require motion.
-         */
-        const auto candidate =
-            single_motor_drive_command(motor_1_winding_counts(), motor_2_winding_counts(),
-
-                                       command.motor_1_target_winding_counts,
-
-                                       command.motor_2_target_winding_counts);
-
-        if (!candidate.has_value()) {
-            return CommandDisposition::rejected_coordinated_motion;
-        }
-
         const MotionTarget target{
             .winding = {.motor_1_m = static_cast<double>(command.motor_1_target_winding_counts) *
                                      meters_per_motor_count,
@@ -155,10 +139,8 @@ std::optional<MotorDriveCommand> H0Device::drive_command() const {
                                  .motor_2 = MotorDriveDirection::off};
     }
 
-    return single_motor_drive_command(motor_1_winding_counts(), motor_2_winding_counts(),
-
-                                      motor_1_target_winding_counts_,
-                                      motor_2_target_winding_counts_);
+    return motor_drive_command(motor_1_winding_counts(), motor_2_winding_counts(),
+                               motor_1_target_winding_counts_, motor_2_target_winding_counts_);
 }
 
 TelemetryPacket H0Device::make_telemetry() {

@@ -350,13 +350,6 @@ bool pulse_drive_command(const atj::h0::MotorDriveCommand& command) {
     const bool motor_1_active = command.motor_1 != atj::h0::MotorDriveDirection::off;
     const bool motor_2_active = command.motor_2 != atj::h0::MotorDriveDirection::off;
 
-    /*
-     * Initial powered phase forbids coordinated drive.
-     */
-    if (motor_1_active && motor_2_active) {
-        return false;
-    }
-
     if (!motor_1_active && !motor_2_active) {
         return true;
     }
@@ -368,31 +361,32 @@ bool pulse_drive_command(const atj::h0::MotorDriveCommand& command) {
          * WIND     -> PA9 / LPWM
          * UNWIND   -> PA8 / RPWM
          */
-
         if (command.motor_1 == atj::h0::MotorDriveDirection::wind) {
             HAL_GPIO_WritePin(GPIOA, GPIO_PIN_9, GPIO_PIN_SET);
         } else {
             HAL_GPIO_WritePin(GPIOA, GPIO_PIN_8, GPIO_PIN_SET);
         }
+    }
 
-        /*
-         * Enable only after direction input is established.
-         */
-        HAL_GPIO_WritePin(GPIOB, GPIO_PIN_5, GPIO_PIN_SET);
-    } else {
+    if (motor_2_active) {
         /*
          * Commissioned Motor 2 mapping:
          *
          * WIND     -> PC7 / RPWM
          * UNWIND   -> PB6 / LPWM
          */
-
         if (command.motor_2 == atj::h0::MotorDriveDirection::wind) {
             HAL_GPIO_WritePin(GPIOC, GPIO_PIN_7, GPIO_PIN_SET);
         } else {
             HAL_GPIO_WritePin(GPIOB, GPIO_PIN_6, GPIO_PIN_SET);
         }
+    }
 
+    if (motor_1_active) {
+        HAL_GPIO_WritePin(GPIOB, GPIO_PIN_5, GPIO_PIN_SET);
+    }
+
+    if (motor_2_active) {
         HAL_GPIO_WritePin(GPIOA, GPIO_PIN_10, GPIO_PIN_SET);
     }
 

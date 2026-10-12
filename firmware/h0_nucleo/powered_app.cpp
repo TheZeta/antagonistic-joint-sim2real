@@ -12,7 +12,7 @@ extern "C" void H0_Powered_Run() {
     h0_firmware::force_disable_drivers();
     h0_firmware::start_command_receiver();
 
-    atj::h0::H0Device device(atj::h0::h0_safety_limits(), atj::h0::MotionAuthority::single_motor);
+    atj::h0::H0Device device(atj::h0::h0_safety_limits(), atj::h0::MotionAuthority::coordinated);
 
     while (true) {
         /*

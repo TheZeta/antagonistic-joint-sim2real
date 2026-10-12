@@ -1,7 +1,6 @@
 #pragma once
 
 #include <cstdint>
-#include <optional>
 
 namespace atj::h0 {
 
@@ -36,26 +35,11 @@ constexpr MotorDriveDirection drive_direction(std::int32_t current_count,
     return MotorDriveDirection::off;
 }
 
-/*
- * Phase-1 powered motion permits at most ONE motor to
- * require motion at a time.
- *
- * nullopt therefore means:
- *
- *      coordinated motion requested -> reject
- */
 [[nodiscard]]
-constexpr std::optional<MotorDriveCommand>
-single_motor_drive_command(std::int32_t motor_1_current, std::int32_t motor_2_current,
-                           std::int32_t motor_1_target, std::int32_t motor_2_target) {
-    const auto motor_1 = drive_direction(motor_1_current, motor_1_target);
-    const auto motor_2 = drive_direction(motor_2_current, motor_2_target);
-
-    if (motor_1 != MotorDriveDirection::off && motor_2 != MotorDriveDirection::off) {
-        return std::nullopt;
-    }
-
-    return MotorDriveCommand{.motor_1 = motor_1, .motor_2 = motor_2};
+constexpr MotorDriveCommand
+motor_drive_command(std::int32_t motor_1_current, std::int32_t motor_2_current,
+                    std::int32_t motor_1_target, std::int32_t motor_2_target) {
+    return MotorDriveCommand{.motor_1 = drive_direction(motor_1_current, motor_1_target),
+                             .motor_2 = drive_direction(motor_2_current, motor_2_target)};
 }
-
 } // namespace atj::h0
