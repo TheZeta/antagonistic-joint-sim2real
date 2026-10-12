@@ -67,7 +67,7 @@ Src/syscalls.c
 
 CPP_SOURCES = \
 ../../board.cpp \
-../../dry_run_app.cpp \
+../../powered_app.cpp \
 ../../../../src/h0_calibration.cpp \
 ../../../../src/h0_coordinates.cpp \
 ../../../../src/h0_safety.cpp \

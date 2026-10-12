@@ -280,7 +280,7 @@ void SafetySupervisor::update(const SafetySample& sample) {
         return;
     }
 
-    if (expected_direction_2_ > 0 && observed_motion_2 > -limits_.direction_movement_threshold_m) {
+    if (expected_direction_2_ > 0 && observed_motion_2 < -limits_.direction_movement_threshold_m) {
         latch_fault(SafetyFault::motor_2_direction_mismatch);
 
         return;

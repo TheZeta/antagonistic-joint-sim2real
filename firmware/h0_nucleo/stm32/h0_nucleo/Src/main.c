@@ -24,7 +24,7 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#include "dry_run_app.h"
+#include "powered_app.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -83,7 +83,7 @@ int main(void) {
 
     /* USER CODE BEGIN SysInit */
 
-    H0_DryRun_PreInit();
+    H0_Powered_PreInit();
 
     /* USER CODE END SysInit */
 
@@ -93,7 +93,7 @@ int main(void) {
     MX_USART2_UART_Init();
     /* USER CODE BEGIN 2 */
 
-    H0_DryRun_Run();
+    H0_Powered_Run();
 
     /* USER CODE END 2 */
 

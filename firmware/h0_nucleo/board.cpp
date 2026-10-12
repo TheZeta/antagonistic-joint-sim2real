@@ -344,6 +344,74 @@ void force_disable_drivers() {
     HAL_GPIO_WritePin(GPIOA, GPIO_PIN_10, GPIO_PIN_RESET);
 }
 
+bool pulse_drive_command(const atj::h0::MotorDriveCommand& command) {
+    force_disable_drivers();
+
+    const bool motor_1_active = command.motor_1 != atj::h0::MotorDriveDirection::off;
+    const bool motor_2_active = command.motor_2 != atj::h0::MotorDriveDirection::off;
+
+    /*
+     * Initial powered phase forbids coordinated drive.
+     */
+    if (motor_1_active && motor_2_active) {
+        return false;
+    }
+
+    if (!motor_1_active && !motor_2_active) {
+        return true;
+    }
+
+    if (motor_1_active) {
+        /*
+         * Commissioned Motor 1 mapping:
+         *
+         * WIND     -> PA9 / LPWM
+         * UNWIND   -> PA8 / RPWM
+         */
+
+        if (command.motor_1 == atj::h0::MotorDriveDirection::wind) {
+            HAL_GPIO_WritePin(GPIOA, GPIO_PIN_9, GPIO_PIN_SET);
+        } else {
+            HAL_GPIO_WritePin(GPIOA, GPIO_PIN_8, GPIO_PIN_SET);
+        }
+
+        /*
+         * Enable only after direction input is established.
+         */
+        HAL_GPIO_WritePin(GPIOB, GPIO_PIN_5, GPIO_PIN_SET);
+    } else {
+        /*
+         * Commissioned Motor 2 mapping:
+         *
+         * WIND     -> PC7 / RPWM
+         * UNWIND   -> PB6 / LPWM
+         */
+
+        if (command.motor_2 == atj::h0::MotorDriveDirection::wind) {
+            HAL_GPIO_WritePin(GPIOC, GPIO_PIN_7, GPIO_PIN_SET);
+        } else {
+            HAL_GPIO_WritePin(GPIOB, GPIO_PIN_6, GPIO_PIN_SET);
+        }
+
+        HAL_GPIO_WritePin(GPIOA, GPIO_PIN_10, GPIO_PIN_SET);
+    }
+
+    /*
+     * One bounded actuation pulse.
+     */
+    HAL_Delay(2);
+
+    /*
+     * Proven shutdown ordering:
+     *
+     * PWM inputs LOW first,
+     * then EN LOW.
+     */
+    force_disable_drivers();
+
+    return true;
+}
+
 void initialize_board() {
     /*
      * Driver outputs first.
@@ -442,7 +510,7 @@ void wait_for_next_cycle() {
     /*
      * Observation-only dry-run rate.
      */
-    HAL_Delay(20);
+    HAL_Delay(8);
 }
 
 extern "C" void USART2_IRQHandler() {

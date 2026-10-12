@@ -4,17 +4,20 @@
 #include "atj/h0_limits.hpp"
 #include "atj/h0_protocol.hpp"
 
-extern "C" void H0_DryRun_PreInit() {
+extern "C" void H0_Powered_PreInit() {
     h0_firmware::initialize_board();
 }
 
-extern "C" void H0_DryRun_Run() {
+extern "C" void H0_Powered_Run() {
     h0_firmware::force_disable_drivers();
     h0_firmware::start_command_receiver();
 
-    atj::h0::H0DryRunDevice device(atj::h0::h0_safety_limits());
+    atj::h0::H0Device device(atj::h0::h0_safety_limits(), atj::h0::MotionAuthority::single_motor);
 
     while (true) {
+        /*
+         * Every cycle begins powerless.
+         */
         h0_firmware::force_disable_drivers();
 
         const auto sample = h0_firmware::try_read_hardware_sample();
@@ -45,6 +48,22 @@ extern "C" void H0_DryRun_Run() {
             const auto disposition = device.handle_command(*command);
         }
 
+        const auto drive = device.drive_command();
+
+        if (!drive.has_value()) {
+            /*
+             * Requiring coordinated motion is forbidden
+             * in this phase.
+             */
+            h0_firmware::force_disable_drivers();
+        } else if (!h0_firmware::pulse_drive_command(*drive)) {
+            h0_firmware::force_disable_drivers();
+        }
+
+        /*
+         * pulse_drive_command() has already returned all
+         * physical outputs to LOW before telemetry.
+         */
         const auto telemetry = device.make_telemetry();
 
         h0_firmware::write_serial_line(atj::h0::serialize_telemetry(telemetry));

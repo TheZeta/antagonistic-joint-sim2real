@@ -4,8 +4,8 @@
 extern "C" {
 #endif
 
-void H0_DryRun_PreInit(void);
-void H0_DryRun_Run(void);
+void H0_Powered_PreInit(void);
+void H0_Powered_Run(void);
 
 #ifdef __cplusplus
 }

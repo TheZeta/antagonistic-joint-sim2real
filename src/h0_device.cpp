@@ -4,9 +4,10 @@
 
 namespace atj::h0 {
 
-H0DryRunDevice::H0DryRunDevice(SafetyLimits limits) : safety_(limits) {}
+H0Device::H0Device(SafetyLimits limits, MotionAuthority motion_authority)
+    : safety_(limits), motion_authority_(motion_authority) {}
 
-std::int32_t H0DryRunDevice::motor_1_winding_counts() const {
+std::int32_t H0Device::motor_1_winding_counts() const {
     if (!baselines_valid_) {
         return 0;
     }
@@ -14,7 +15,7 @@ std::int32_t H0DryRunDevice::motor_1_winding_counts() const {
     return winding_count_from_raw(raw_.motor_1_raw_count, motor_1_baseline_count_);
 }
 
-std::int32_t H0DryRunDevice::motor_2_winding_counts() const {
+std::int32_t H0Device::motor_2_winding_counts() const {
     if (!baselines_valid_) {
         return 0;
     }
@@ -22,31 +23,24 @@ std::int32_t H0DryRunDevice::motor_2_winding_counts() const {
     return winding_count_from_raw(raw_.motor_2_raw_count, motor_2_baseline_count_);
 }
 
-SafetySample H0DryRunDevice::safety_sample() const {
+SafetySample H0Device::safety_sample() const {
     const double time_s = static_cast<double>(raw_.time_us) * 1e-6;
 
-    const double q = joint_angle_rad_from_raw(raw_.qraw);
+    return SafetySample{
+        .time_s = time_s,
 
-    const double winding_1_m =
-        static_cast<double>(motor_1_winding_counts()) * meters_per_motor_count;
+        .joint_angle_rad = joint_angle_rad_from_raw(raw_.qraw),
 
-    const double winding_2_m =
-        static_cast<double>(motor_2_winding_counts()) * meters_per_motor_count;
+        .winding = {
+            .motor_1_m = static_cast<double>(motor_1_winding_counts()) * meters_per_motor_count,
 
-    return SafetySample{.time_s = time_s,
-                        .joint_angle_rad = q,
-                        .winding = {.motor_1_m = winding_1_m, .motor_2_m = winding_2_m}};
+            .motor_2_m = static_cast<double>(motor_2_winding_counts()) * meters_per_motor_count}};
 }
 
-void H0DryRunDevice::ingest_sample(const RawHardwareSample& sample) {
+void H0Device::ingest_sample(const RawHardwareSample& sample) {
     raw_ = sample;
     have_sample_ = true;
 
-    /*
-     * Before ARM there is no motor-coordinate baseline,
-     * so there is nothing meaningful for the safety
-     * supervisor to monitor beyond startup observation.
-     */
     if (!baselines_valid_) {
         return;
     }
@@ -54,7 +48,7 @@ void H0DryRunDevice::ingest_sample(const RawHardwareSample& sample) {
     safety_.update(safety_sample());
 }
 
-CommandDisposition H0DryRunDevice::handle_command(const HostCommand& command) {
+CommandDisposition H0Device::handle_command(const HostCommand& command) {
     switch (command.type) {
 
     case CommandType::arm: {
@@ -62,12 +56,12 @@ CommandDisposition H0DryRunDevice::handle_command(const HostCommand& command) {
             return CommandDisposition::rejected_no_sample;
         }
 
-        /*
-         * ARM defines the current physical motor positions
-         * as zero winding displacement.
-         */
         motor_1_baseline_count_ = raw_.motor_1_raw_count;
+
         motor_2_baseline_count_ = raw_.motor_2_raw_count;
+
+        motor_1_target_winding_counts_ = 0;
+        motor_2_target_winding_counts_ = 0;
 
         baselines_valid_ = true;
 
@@ -82,30 +76,92 @@ CommandDisposition H0DryRunDevice::handle_command(const HostCommand& command) {
 
     case CommandType::disable:
         safety_.disable();
+
         baselines_valid_ = false;
+
+        motor_1_target_winding_counts_ = 0;
+        motor_2_target_winding_counts_ = 0;
 
         return CommandDisposition::accepted;
 
     case CommandType::clear_fault:
         safety_.clear_fault();
+
         baselines_valid_ = false;
+
+        motor_1_target_winding_counts_ = 0;
+        motor_2_target_winding_counts_ = 0;
 
         return CommandDisposition::accepted;
 
-    case CommandType::move:
+    case CommandType::move: {
+        if (motion_authority_ == MotionAuthority::inhibited) {
+            return CommandDisposition::rejected_motion_inhibited;
+        }
+
+        if (!have_sample_ || !baselines_valid_) {
+            return CommandDisposition::rejected_no_sample;
+        }
+
         /*
-         * Intentionally impossible in dry-run firmware.
+         * Phase 1:
          *
-         * We parse MOVE so protocol compatibility can be
-         * tested, but we do not pass it to begin_motion().
+         * at most one motor may require motion.
          */
-        return CommandDisposition::rejected_motion_inhibited;
+        const auto candidate =
+            single_motor_drive_command(motor_1_winding_counts(), motor_2_winding_counts(),
+
+                                       command.motor_1_target_winding_counts,
+
+                                       command.motor_2_target_winding_counts);
+
+        if (!candidate.has_value()) {
+            return CommandDisposition::rejected_coordinated_motion;
+        }
+
+        const MotionTarget target{
+            .winding = {.motor_1_m = static_cast<double>(command.motor_1_target_winding_counts) *
+                                     meters_per_motor_count,
+
+                        .motor_2_m = static_cast<double>(command.motor_2_target_winding_counts) *
+                                     meters_per_motor_count}};
+
+        if (!safety_.begin_motion(target, safety_sample())) {
+            return CommandDisposition::rejected_by_safety;
+        }
+
+        motor_1_target_winding_counts_ = command.motor_1_target_winding_counts;
+
+        motor_2_target_winding_counts_ = command.motor_2_target_winding_counts;
+
+        return CommandDisposition::accepted;
+    }
     }
 
     return CommandDisposition::rejected_by_safety;
 }
 
-TelemetryPacket H0DryRunDevice::make_telemetry() {
+std::optional<MotorDriveCommand> H0Device::drive_command() const {
+    /*
+     * SafetySupervisor allows drive authority only in
+     * MOVING or HOLDING.
+     *
+     * HOLDING remains active so a small disturbance can be
+     * corrected before it grows into a tracking fault.
+     */
+    if (!safety_.driver_enable_allowed()) {
+        return MotorDriveCommand{.motor_1 = MotorDriveDirection::off,
+
+                                 .motor_2 = MotorDriveDirection::off};
+    }
+
+    return single_motor_drive_command(motor_1_winding_counts(), motor_2_winding_counts(),
+
+                                      motor_1_target_winding_counts_,
+                                      motor_2_target_winding_counts_);
+}
+
+TelemetryPacket H0Device::make_telemetry() {
     TelemetryPacket packet{};
 
     packet.sequence = telemetry_sequence_++;
@@ -119,30 +175,30 @@ TelemetryPacket H0DryRunDevice::make_telemetry() {
     packet.qraw = raw_.qraw;
 
     packet.motor_1_raw_count = raw_.motor_1_raw_count;
+
     packet.motor_2_raw_count = raw_.motor_2_raw_count;
 
     if (baselines_valid_) {
         packet.motor_1_baseline_count = motor_1_baseline_count_;
+
         packet.motor_2_baseline_count = motor_2_baseline_count_;
 
         packet.motor_1_winding_counts = motor_1_winding_counts();
+
         packet.motor_2_winding_counts = motor_2_winding_counts();
+
+        packet.motor_1_target_winding_counts = motor_1_target_winding_counts_;
+
+        packet.motor_2_target_winding_counts = motor_2_target_winding_counts_;
     }
 
-    /*
-     * There are deliberately no active motor targets
-     * in dry-run firmware.
-     */
-    packet.motor_1_target_winding_counts = 0;
-    packet.motor_2_target_winding_counts = 0;
-
     packet.state = safety_.state();
+
     packet.fault = safety_.fault();
 
     /*
-     * Critical invariant:
-     *
-     * dry-run firmware physically cannot enable drivers.
+     * Telemetry is emitted only after each short drive pulse
+     * has ended, so the physical enable pins are LOW here.
      */
     packet.driver_enabled = false;
 

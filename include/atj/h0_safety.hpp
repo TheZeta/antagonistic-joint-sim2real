@@ -2,6 +2,8 @@
 
 #include "atj/h0_coordinates.hpp"
 
+#include <cstdint>
+
 namespace atj::h0 {
 
 enum class SafetyState { disabled = 0, armed = 1, moving = 2, holding = 3, fault = 4 };

@@ -1,8 +1,10 @@
 #pragma once
 
+#include "atj/h0_motor_servo.hpp"
 #include "atj/h0_protocol.hpp"
 
 #include <cstdint>
+#include <optional>
 
 namespace atj::h0 {
 
@@ -19,12 +21,16 @@ enum class CommandDisposition {
     accepted,
     rejected_no_sample,
     rejected_motion_inhibited,
+    rejected_coordinated_motion,
     rejected_by_safety
 };
 
-class H0DryRunDevice {
+enum class MotionAuthority { inhibited, single_motor };
+
+class H0Device {
   public:
-    explicit H0DryRunDevice(SafetyLimits limits);
+    explicit H0Device(SafetyLimits limits,
+                      MotionAuthority motion_authority = MotionAuthority::inhibited);
 
     /*
      * Supply the newest physical sensor readings.
@@ -39,6 +45,9 @@ class H0DryRunDevice {
     [[nodiscard]]
     CommandDisposition handle_command(const HostCommand& command);
 
+    [[nodiscard]]
+    std::optional<MotorDriveCommand> drive_command() const;
+
     /*
      * Build the next telemetry packet.
      */
@@ -48,6 +57,8 @@ class H0DryRunDevice {
   private:
     SafetySupervisor safety_;
 
+    MotionAuthority motion_authority_;
+
     bool have_sample_ = false;
     bool baselines_valid_ = false;
 
@@ -55,6 +66,9 @@ class H0DryRunDevice {
 
     std::int32_t motor_1_baseline_count_ = 0;
     std::int32_t motor_2_baseline_count_ = 0;
+
+    std::int32_t motor_1_target_winding_counts_ = 0;
+    std::int32_t motor_2_target_winding_counts_ = 0;
 
     std::uint32_t telemetry_sequence_ = 0;
 
@@ -67,5 +81,11 @@ class H0DryRunDevice {
     [[nodiscard]]
     std::int32_t motor_2_winding_counts() const;
 };
+
+/*
+ * Preserve all existing dry-run tests/source compatibility.
+ *
+ * Default authority remains inhibited.
+ */
 
 } // namespace atj::h0

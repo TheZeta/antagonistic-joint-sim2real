@@ -1,4 +1,5 @@
 #include "atj/h0_device.hpp"
+#include "atj/h0_limits.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -32,7 +33,7 @@ atj::h0::RawHardwareSample initial_sample() {
 } // namespace
 
 TEST_CASE("H0 dry-run device starts with drivers disabled") {
-    atj::h0::H0DryRunDevice device(test_limits());
+    atj::h0::H0Device device(test_limits());
 
     device.ingest_sample(initial_sample());
 
@@ -44,7 +45,7 @@ TEST_CASE("H0 dry-run device starts with drivers disabled") {
 }
 
 TEST_CASE("H0 ARM captures current motor encoder baselines") {
-    atj::h0::H0DryRunDevice device(test_limits());
+    atj::h0::H0Device device(test_limits());
 
     device.ingest_sample(initial_sample());
 
@@ -66,7 +67,7 @@ TEST_CASE("H0 ARM captures current motor encoder baselines") {
 }
 
 TEST_CASE("H0 dry-run telemetry reports normalized winding counts") {
-    atj::h0::H0DryRunDevice device(test_limits());
+    atj::h0::H0Device device(test_limits());
 
     device.ingest_sample(initial_sample());
 
@@ -99,7 +100,7 @@ TEST_CASE("H0 dry-run telemetry reports normalized winding counts") {
 }
 
 TEST_CASE("H0 dry-run firmware rejects MOVE commands") {
-    atj::h0::H0DryRunDevice device(test_limits());
+    atj::h0::H0Device device(test_limits());
 
     device.ingest_sample(initial_sample());
 
@@ -126,7 +127,7 @@ TEST_CASE("H0 dry-run firmware rejects MOVE commands") {
 }
 
 TEST_CASE("H0 DISABLE requires fresh baselines before next run") {
-    atj::h0::H0DryRunDevice device(test_limits());
+    atj::h0::H0Device device(test_limits());
 
     device.ingest_sample(initial_sample());
 
@@ -146,4 +147,136 @@ TEST_CASE("H0 DISABLE requires fresh baselines before next run") {
     REQUIRE(telemetry.motor_2_winding_counts == 0);
 
     REQUIRE_FALSE(telemetry.driver_enabled);
+}
+
+TEST_CASE("H0 single-motor authority accepts bounded Motor 1 WIND move") {
+    atj::h0::H0Device device(atj::h0::h0_safety_limits(), atj::h0::MotionAuthority::single_motor);
+
+    const auto initial = initial_sample();
+
+    device.ingest_sample(initial);
+
+    const atj::h0::HostCommand arm{.sequence = 1, .type = atj::h0::CommandType::arm};
+
+    REQUIRE(device.handle_command(arm) == atj::h0::CommandDisposition::accepted);
+
+    const atj::h0::HostCommand move{.sequence = 2,
+                                    .type = atj::h0::CommandType::move,
+                                    .motor_1_target_winding_counts = 5,
+                                    .motor_2_target_winding_counts = 0};
+
+    REQUIRE(device.handle_command(move) == atj::h0::CommandDisposition::accepted);
+
+    const auto drive = device.drive_command();
+
+    REQUIRE(drive.has_value());
+
+    REQUIRE(drive->motor_1 == atj::h0::MotorDriveDirection::wind);
+    REQUIRE(drive->motor_2 == atj::h0::MotorDriveDirection::off);
+
+    const auto telemetry = device.make_telemetry();
+
+    REQUIRE(telemetry.state == atj::h0::SafetyState::moving);
+    REQUIRE(telemetry.motor_1_target_winding_counts == 5);
+}
+
+TEST_CASE("H0 initial powered authority rejects coordinated move") {
+    atj::h0::H0Device device(atj::h0::h0_safety_limits(), atj::h0::MotionAuthority::single_motor);
+
+    device.ingest_sample(initial_sample());
+
+    const atj::h0::HostCommand arm{.sequence = 1, .type = atj::h0::CommandType::arm};
+
+    REQUIRE(device.handle_command(arm) == atj::h0::CommandDisposition::accepted);
+
+    const atj::h0::HostCommand move{.sequence = 2,
+                                    .type = atj::h0::CommandType::move,
+                                    .motor_1_target_winding_counts = 5,
+                                    .motor_2_target_winding_counts = -5};
+
+    REQUIRE(device.handle_command(move) ==
+            atj::h0::CommandDisposition::rejected_coordinated_motion);
+
+    REQUIRE(device.make_telemetry().state == atj::h0::SafetyState::armed);
+}
+
+TEST_CASE("H0 correct encoder motion reaches holding") {
+    atj::h0::H0Device device(atj::h0::h0_safety_limits(), atj::h0::MotionAuthority::single_motor);
+
+    const auto initial = initial_sample();
+
+    device.ingest_sample(initial);
+
+    REQUIRE(device.handle_command({.sequence = 1, .type = atj::h0::CommandType::arm}) ==
+            atj::h0::CommandDisposition::accepted);
+
+    REQUIRE(device.handle_command({.sequence = 2,
+                                   .type = atj::h0::CommandType::move,
+                                   .motor_1_target_winding_counts = 5,
+                                   .motor_2_target_winding_counts = 0}) ==
+            atj::h0::CommandDisposition::accepted);
+
+    auto moved = initial;
+
+    moved.time_us += 10'000;
+
+    /*
+     * WIND -> raw count decreases.
+     *
+     * baseline 1000 -> raw 995
+     * normalized winding = +5.
+     */
+    moved.motor_1_raw_count = 995;
+
+    device.ingest_sample(moved);
+
+    REQUIRE(device.make_telemetry().state == atj::h0::SafetyState::holding);
+
+    const auto drive = device.drive_command();
+
+    REQUIRE(drive.has_value());
+
+    REQUIRE(drive->motor_1 == atj::h0::MotorDriveDirection::off);
+}
+
+TEST_CASE("H0 wrong encoder direction faults after one sample") {
+    atj::h0::H0Device device(atj::h0::h0_safety_limits(), atj::h0::MotionAuthority::single_motor);
+
+    const auto initial = initial_sample();
+
+    device.ingest_sample(initial);
+
+    REQUIRE(device.handle_command({.sequence = 1, .type = atj::h0::CommandType::arm}) ==
+            atj::h0::CommandDisposition::accepted);
+
+    REQUIRE(device.handle_command({.sequence = 2,
+                                   .type = atj::h0::CommandType::move,
+                                   .motor_1_target_winding_counts = 5,
+                                   .motor_2_target_winding_counts = 0}) ==
+            atj::h0::CommandDisposition::accepted);
+
+    auto wrong = initial;
+
+    wrong.time_us += 10'000;
+
+    /*
+     * Commanded WIND, but raw encoder increased:
+     *
+     * normalized displacement = -5 counts.
+     */
+    wrong.motor_1_raw_count = 1005;
+
+    device.ingest_sample(wrong);
+
+    const auto telemetry = device.make_telemetry();
+
+    REQUIRE(telemetry.state == atj::h0::SafetyState::fault);
+    REQUIRE(telemetry.fault == atj::h0::SafetyFault::motor_1_direction_mismatch);
+
+    const auto drive = device.drive_command();
+
+    REQUIRE(drive.has_value());
+
+    REQUIRE(drive->motor_1 == atj::h0::MotorDriveDirection::off);
+    REQUIRE(drive->motor_2 == atj::h0::MotorDriveDirection::off);
 }
