@@ -67,6 +67,7 @@ add_executable(
     tests/test_h0_device.cpp
     tests/test_h0_limits.cpp
     tests/test_h0_motor_servo.cpp
+    tests/test_h0_telemetry.cpp
 )
 
 target_link_libraries(
@@ -332,6 +333,25 @@ target_link_libraries(
 
 target_compile_options(
     atj_h0
+    PRIVATE
+        -Wall
+        -Wextra
+        -Wpedantic
+        -Wconversion
+)
+
+add_executable(
+    h0_logger
+    apps/h0_logger.cpp
+)
+
+target_link_libraries(
+    h0_logger
+    PRIVATE atj_h0
+)
+
+target_compile_options(
+    h0_logger
     PRIVATE
         -Wall
         -Wextra
