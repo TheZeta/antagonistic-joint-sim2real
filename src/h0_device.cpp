@@ -133,7 +133,7 @@ std::optional<MotorDriveCommand> H0Device::drive_command() const {
      * HOLDING remains active so a small disturbance can be
      * corrected before it grows into a tracking fault.
      */
-    if (!safety_.driver_enable_allowed()) {
+    if (safety_.state() != SafetyState::moving) {
         return MotorDriveCommand{.motor_1 = MotorDriveDirection::off,
 
                                  .motor_2 = MotorDriveDirection::off};

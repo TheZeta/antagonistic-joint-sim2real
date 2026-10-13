@@ -358,3 +358,23 @@ target_compile_options(
         -Wpedantic
         -Wconversion
 )
+
+add_executable(
+    h0_differential_sweep
+    apps/h0_differential_sweep.cpp
+)
+
+target_link_libraries(
+    h0_differential_sweep
+    PRIVATE
+    atj_h0
+)
+
+target_compile_options(
+    h0_differential_sweep
+    PRIVATE
+    -Wall
+    -Wextra
+    -Wpedantic
+    -Wconversion
+)
