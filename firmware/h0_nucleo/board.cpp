@@ -20,6 +20,67 @@ namespace {
 TIM_HandleTypeDef motor_1_encoder_timer{};
 TIM_HandleTypeDef motor_2_encoder_timer{};
 
+TIM_HandleTypeDef motor_1_pwm_timer{};
+TIM_HandleTypeDef motor_2_rpwm_timer{};
+TIM_HandleTypeDef motor_2_lpwm_timer{};
+
+bool motor_pwm_initialized = false;
+
+constexpr std::uint32_t pwm_frequency_hz = 20'000;
+constexpr std::uint32_t pwm_period_counts = 100;
+constexpr std::uint32_t drive_duty_percent = 20;
+constexpr std::uint32_t drive_compare = pwm_period_counts * drive_duty_percent / 100;
+
+std::uint32_t apb1_timer_clock_hz() {
+    const std::uint32_t pclk = HAL_RCC_GetPCLK1Freq();
+
+    if ((RCC->CFGR & RCC_CFGR_PPRE1) != 0U) {
+        return pclk * 2U;
+    }
+
+    return pclk;
+}
+
+std::uint32_t apb2_timer_clock_hz() {
+    const std::uint32_t pclk = HAL_RCC_GetPCLK2Freq();
+
+    if ((RCC->CFGR & RCC_CFGR_PPRE2) != 0U) {
+        return pclk * 2U;
+    }
+
+    return pclk;
+}
+
+bool initialize_pwm_timer(TIM_HandleTypeDef& timer, TIM_TypeDef* instance,
+                          std::uint32_t timer_clock_hz) {
+    const std::uint32_t denominator = pwm_frequency_hz * pwm_period_counts;
+    const std::uint32_t prescaler_divisor = timer_clock_hz / denominator;
+
+    if (prescaler_divisor == 0U) {
+        return false;
+    }
+
+    timer.Instance = instance;
+    timer.Init.Prescaler = prescaler_divisor - 1U;
+    timer.Init.CounterMode = TIM_COUNTERMODE_UP;
+    timer.Init.Period = pwm_period_counts - 1U;
+    timer.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+    timer.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+
+    return HAL_TIM_PWM_Init(&timer) == HAL_OK;
+}
+
+bool initialize_pwm_channel(TIM_HandleTypeDef& timer, std::uint32_t channel) {
+    TIM_OC_InitTypeDef config{};
+
+    config.OCMode = TIM_OCMODE_PWM1;
+    config.Pulse = 0;
+    config.OCPolarity = TIM_OCPOLARITY_HIGH;
+    config.OCFastMode = TIM_OCFAST_DISABLE;
+
+    return HAL_TIM_PWM_ConfigChannel(&timer, &config, channel) == HAL_OK;
+}
+
 constexpr std::uint16_t as5600_address = static_cast<std::uint16_t>(0x36U << 1U);
 
 constexpr std::uint16_t as5600_raw_angle_register = 0x0CU;
@@ -58,50 +119,117 @@ void initialize_motor_gpio() {
     __HAL_RCC_GPIOC_CLK_ENABLE();
 
     /*
-     * Preload all output data registers LOW before changing
-     * the pins into output mode.
+     * EN pins remain ordinary GPIO outputs.
+     *
+     * Motor 1 EN = PB5
+     * Motor 2 EN = PA10
      */
-
-    HAL_GPIO_WritePin(GPIOA, GPIO_PIN_8 | GPIO_PIN_9 | GPIO_PIN_10, GPIO_PIN_RESET);
-
-    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_5 | GPIO_PIN_6, GPIO_PIN_RESET);
-
-    HAL_GPIO_WritePin(GPIOC, GPIO_PIN_7, GPIO_PIN_RESET);
+    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_5, GPIO_PIN_RESET);
+    HAL_GPIO_WritePin(GPIOA, GPIO_PIN_10, GPIO_PIN_RESET);
 
     GPIO_InitTypeDef gpio{};
 
     gpio.Mode = GPIO_MODE_OUTPUT_PP;
     gpio.Pull = GPIO_NOPULL;
     gpio.Speed = GPIO_SPEED_FREQ_LOW;
+    gpio.Pin = GPIO_PIN_5;
+
+    HAL_GPIO_Init(GPIOB, &gpio);
+    gpio.Pin = GPIO_PIN_10;
+    HAL_GPIO_Init(GPIOA, &gpio);
 
     /*
      * Motor 1:
      *
-     * PA8 = RPWM
-     * PA9 = LPWM
-     *
-     * Motor 2:
-     *
-     * PA10 = EN
+     * PA8 = TIM1_CH1 = RPWM
+     * PA9 = TIM1_CH2 = LPWM
      */
-    gpio.Pin = GPIO_PIN_8 | GPIO_PIN_9 | GPIO_PIN_10;
+    gpio.Pin = GPIO_PIN_8 | GPIO_PIN_9;
+    gpio.Mode = GPIO_MODE_AF_PP;
+    gpio.Pull = GPIO_NOPULL;
+    gpio.Speed = GPIO_SPEED_FREQ_LOW;
+    gpio.Alternate = GPIO_AF1_TIM1;
 
     HAL_GPIO_Init(GPIOA, &gpio);
+    ;
 
     /*
-     * PB5 = Motor 1 EN
-     * PB6 = Motor 2 LPWM
-     */
-    gpio.Pin = GPIO_PIN_5 | GPIO_PIN_6;
-
-    HAL_GPIO_Init(GPIOB, &gpio);
-
-    /*
-     * PC7 = Motor 2 RPWM
+     * Motor 2:
+     *
+     * PC7 = TIM8_CH2 = RPWM
      */
     gpio.Pin = GPIO_PIN_7;
+    gpio.Alternate = GPIO_AF3_TIM8;
 
     HAL_GPIO_Init(GPIOC, &gpio);
+
+    /*
+     * Motor 2:
+     *
+     * PB6 = TIM4_CH1 = LPWM
+     */
+    gpio.Pin = GPIO_PIN_6;
+    gpio.Alternate = GPIO_AF2_TIM4;
+
+    HAL_GPIO_Init(GPIOB, &gpio);
+}
+
+void initialize_motor_pwm() {
+    __HAL_RCC_TIM1_CLK_ENABLE();
+    __HAL_RCC_TIM4_CLK_ENABLE();
+    __HAL_RCC_TIM8_CLK_ENABLE();
+
+    /*
+     * Motor 1:
+     *
+     * TIM1_CH1 = RPWM
+     * TIM1_CH2 = LPWM
+     */
+    if (!initialize_pwm_timer(motor_1_pwm_timer, TIM1, apb2_timer_clock_hz())) {
+        Error_Handler();
+    }
+
+    if (!initialize_pwm_channel(motor_1_pwm_timer, TIM_CHANNEL_1) ||
+        !initialize_pwm_channel(motor_1_pwm_timer, TIM_CHANNEL_2)) {
+        Error_Handler();
+    }
+
+    /*
+     * Motor 2 RPWM:
+     *
+     * TIM8_CH2 / PC7
+     */
+    if (!initialize_pwm_timer(motor_2_rpwm_timer, TIM8, apb2_timer_clock_hz()) ||
+        !initialize_pwm_channel(motor_2_rpwm_timer, TIM_CHANNEL_2)) {
+        Error_Handler();
+    }
+
+    /*
+     * Motor 2 LPWM:
+     *
+     * TIM4_CH1 / PB6
+     */
+    if (!initialize_pwm_timer(motor_2_lpwm_timer, TIM4, apb1_timer_clock_hz()) ||
+        !initialize_pwm_channel(motor_2_lpwm_timer, TIM_CHANNEL_1)) {
+        Error_Handler();
+    }
+
+    /*
+     * All PWM starts at zero duty
+     */
+    __HAL_TIM_SET_COMPARE(&motor_1_pwm_timer, TIM_CHANNEL_1, 0);
+    __HAL_TIM_SET_COMPARE(&motor_1_pwm_timer, TIM_CHANNEL_2, 0);
+    __HAL_TIM_SET_COMPARE(&motor_2_rpwm_timer, TIM_CHANNEL_2, 0);
+    __HAL_TIM_SET_COMPARE(&motor_2_lpwm_timer, TIM_CHANNEL_1, 0);
+
+    if (HAL_TIM_PWM_Start(&motor_1_pwm_timer, TIM_CHANNEL_1) != HAL_OK ||
+        HAL_TIM_PWM_Start(&motor_1_pwm_timer, TIM_CHANNEL_2) != HAL_OK ||
+        HAL_TIM_PWM_Start(&motor_2_rpwm_timer, TIM_CHANNEL_2) != HAL_OK ||
+        HAL_TIM_PWM_Start(&motor_2_lpwm_timer, TIM_CHANNEL_1) != HAL_OK) {
+        Error_Handler();
+    }
+
+    motor_pwm_initialized = true;
 }
 
 void initialize_encoder_gpio() {
@@ -316,72 +444,59 @@ void start_command_receiver() {
 }
 
 void force_disable_drivers() {
+    if (motor_pwm_initialized) {
+        /*
+         * PWM duty to zero FIRST.
+         */
+        __HAL_TIM_SET_COMPARE(&motor_1_pwm_timer, TIM_CHANNEL_1, 0);
+        __HAL_TIM_SET_COMPARE(&motor_1_pwm_timer, TIM_CHANNEL_2, 0);
+        __HAL_TIM_SET_COMPARE(&motor_2_rpwm_timer, TIM_CHANNEL_2, 0);
+        __HAL_TIM_SET_COMPARE(&motor_2_lpwm_timer, TIM_CHANNEL_1, 0);
+    }
+
     /*
-     * Proven H0 fail-safe state:
-     *
-     * Motor 1:
-     * PA8 = RPWM = LOW
-     * PA9 = LPWM = LOW
-     * PB5 = EN   = LOW
+     * Then disable the two IBT-2s.
      */
-
-    HAL_GPIO_WritePin(GPIOA, GPIO_PIN_8 | GPIO_PIN_9, GPIO_PIN_RESET);
-
     HAL_GPIO_WritePin(GPIOB, GPIO_PIN_5, GPIO_PIN_RESET);
-
-    /*
-     * Motor 2:
-     *
-     * PC7  = RPWM = LOW
-     * PB6  = LPWM = LOW
-     * PA10 = EN   = LOW
-     */
-
-    HAL_GPIO_WritePin(GPIOC, GPIO_PIN_7, GPIO_PIN_RESET);
-
-    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_6, GPIO_PIN_RESET);
-
     HAL_GPIO_WritePin(GPIOA, GPIO_PIN_10, GPIO_PIN_RESET);
 }
 
-bool pulse_drive_command(const atj::h0::MotorDriveCommand& command) {
+bool apply_drive_command(const atj::h0::MotorDriveCommand& command) {
+    /*
+     * Briefly remove authority while changing direction.
+     */
     force_disable_drivers();
 
     const bool motor_1_active = command.motor_1 != atj::h0::MotorDriveDirection::off;
     const bool motor_2_active = command.motor_2 != atj::h0::MotorDriveDirection::off;
 
-    if (!motor_1_active && !motor_2_active) {
-        return true;
+    /*
+     * Motor 1 mapping confirmed during commissioning:
+     *
+     * WIND     -> PA9 / LPWM / TIM1_CH2
+     * UNWIND   -> PA8 / RPWM / TIM1_CH1
+     */
+    if (command.motor_1 == atj::h0::MotorDriveDirection::wind) {
+        __HAL_TIM_SET_COMPARE(&motor_1_pwm_timer, TIM_CHANNEL_2, drive_compare);
+    } else if (command.motor_1 == atj::h0::MotorDriveDirection::unwind) {
+        __HAL_TIM_SET_COMPARE(&motor_1_pwm_timer, TIM_CHANNEL_1, drive_compare);
     }
 
-    if (motor_1_active) {
-        /*
-         * Commissioned Motor 1 mapping:
-         *
-         * WIND     -> PA9 / LPWM
-         * UNWIND   -> PA8 / RPWM
-         */
-        if (command.motor_1 == atj::h0::MotorDriveDirection::wind) {
-            HAL_GPIO_WritePin(GPIOA, GPIO_PIN_9, GPIO_PIN_SET);
-        } else {
-            HAL_GPIO_WritePin(GPIOA, GPIO_PIN_8, GPIO_PIN_SET);
-        }
+    /*
+     * Motor 2:
+     *
+     * WIND     -> PC7 / RPWM / TIM8_CH2
+     * UNWIND   -> PB6 / LPWM / TIM4_CH1
+     */
+    if (command.motor_2 == atj::h0::MotorDriveDirection::wind) {
+        __HAL_TIM_SET_COMPARE(&motor_2_rpwm_timer, TIM_CHANNEL_2, drive_compare);
+    } else if (command.motor_2 == atj::h0::MotorDriveDirection::unwind) {
+        __HAL_TIM_SET_COMPARE(&motor_2_lpwm_timer, TIM_CHANNEL_1, drive_compare);
     }
 
-    if (motor_2_active) {
-        /*
-         * Commissioned Motor 2 mapping:
-         *
-         * WIND     -> PC7 / RPWM
-         * UNWIND   -> PB6 / LPWM
-         */
-        if (command.motor_2 == atj::h0::MotorDriveDirection::wind) {
-            HAL_GPIO_WritePin(GPIOC, GPIO_PIN_7, GPIO_PIN_SET);
-        } else {
-            HAL_GPIO_WritePin(GPIOB, GPIO_PIN_6, GPIO_PIN_SET);
-        }
-    }
-
+    /*
+     * Enable only after direction + duty have been set.
+     */
     if (motor_1_active) {
         HAL_GPIO_WritePin(GPIOB, GPIO_PIN_5, GPIO_PIN_SET);
     }
@@ -390,30 +505,16 @@ bool pulse_drive_command(const atj::h0::MotorDriveCommand& command) {
         HAL_GPIO_WritePin(GPIOA, GPIO_PIN_10, GPIO_PIN_SET);
     }
 
-    /*
-     * One bounded actuation pulse.
-     */
-    HAL_Delay(2);
-
-    /*
-     * Proven shutdown ordering:
-     *
-     * PWM inputs LOW first,
-     * then EN LOW.
-     */
-    force_disable_drivers();
-
     return true;
 }
 
 void initialize_board() {
     /*
-     * Driver outputs first.
-     *
-     * These pins were absent from the old CubeMX .ioc,
-     * so the permanent H0 board layer owns them.
+     * EN pins are definitely LOW here.
      */
     initialize_motor_gpio();
+
+    initialize_motor_pwm();
 
     force_disable_drivers();
 

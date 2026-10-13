@@ -51,7 +51,7 @@ class H0Device {
      * Build the next telemetry packet.
      */
     [[nodiscard]]
-    TelemetryPacket make_telemetry();
+    TelemetryPacket make_telemetry(bool driver_enabled = false);
 
   private:
     SafetySupervisor safety_;

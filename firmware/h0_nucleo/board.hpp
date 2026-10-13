@@ -37,7 +37,7 @@ std::optional<atj::h0::RawHardwareSample> try_read_hardware_sample();
 std::optional<std::string> try_read_command_line();
 
 [[nodiscard]]
-bool pulse_drive_command(const atj::h0::MotorDriveCommand& command);
+bool apply_drive_command(const atj::h0::MotorDriveCommand& command);
 
 /*
  * Transmit one protocol line

@@ -143,7 +143,7 @@ std::optional<MotorDriveCommand> H0Device::drive_command() const {
                                motor_1_target_winding_counts_, motor_2_target_winding_counts_);
 }
 
-TelemetryPacket H0Device::make_telemetry() {
+TelemetryPacket H0Device::make_telemetry(bool driver_enabled) {
     TelemetryPacket packet{};
 
     packet.sequence = telemetry_sequence_++;
@@ -182,7 +182,7 @@ TelemetryPacket H0Device::make_telemetry() {
      * Telemetry is emitted only after each short drive pulse
      * has ended, so the physical enable pins are LOW here.
      */
-    packet.driver_enabled = false;
+    packet.driver_enabled = driver_enabled;
 
     return packet;
 }
