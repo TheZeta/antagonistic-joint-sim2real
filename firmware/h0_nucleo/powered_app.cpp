@@ -14,6 +14,9 @@ extern "C" void H0_Powered_Run() {
 
     atj::h0::H0Device device(atj::h0::h0_safety_limits(), atj::h0::MotionAuthority::coordinated);
 
+    std::uint64_t last_telemetry_time_us = 0;
+    constexpr std::uint64_t telemetry_period_us = 20'000;
+
     while (true) {
         const auto sample = h0_firmware::try_read_hardware_sample();
 
@@ -43,28 +46,25 @@ extern "C" void H0_Powered_Run() {
             const auto disposition = device.handle_command(*command);
         }
 
-        const auto drive = device.drive_command();
-        bool driver_active = false;
+        const auto servo = device.servo_output();
 
-        if (!drive.has_value()) {
+        if (!h0_firmware::apply_servo_output(servo)) {
             h0_firmware::force_disable_drivers();
-        } else {
-            const bool motor_1_active = drive->motor_1 != atj::h0::MotorDriveDirection::off;
-            const bool motor_2_active = drive->motor_2 != atj::h0::MotorDriveDirection::off;
-
-            if (!h0_firmware::apply_drive_command(*drive)) {
-                h0_firmware::force_disable_drivers();
-            } else {
-                driver_active = motor_1_active || motor_2_active;
-            }
         }
-        /*
-         * apply_drive_command() has already returned all
-         * physical outputs to LOW before telemetry.
-         */
-        const auto telemetry = device.make_telemetry(driver_active);
 
-        h0_firmware::write_serial_line(atj::h0::serialize_telemetry(telemetry));
+        const bool motor_1_enabled = servo.motor_1.mode != atj::h0::MotorServoMode::coast;
+        const bool motor_2_enabled = servo.motor_2.mode != atj::h0::MotorServoMode::coast;
+        const bool driver_enabled = motor_1_enabled || motor_2_enabled;
+
+        const bool telemetry_due = last_telemetry_time_us == 0 ||
+                                   sample->time_us - last_telemetry_time_us >= telemetry_period_us;
+
+        if (telemetry_due) {
+            const auto telemetry = device.make_telemetry(driver_enabled);
+            h0_firmware::write_serial_line(atj::h0::serialize_telemetry(telemetry));
+            last_telemetry_time_us = sample->time_us;
+        }
+
         h0_firmware::wait_for_next_cycle();
     }
 }

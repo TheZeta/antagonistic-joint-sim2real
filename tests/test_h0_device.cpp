@@ -290,3 +290,37 @@ TEST_CASE("H0 wrong encoder direction faults after one sample") {
     REQUIRE(drive->motor_1 == atj::h0::MotorDriveDirection::off);
     REQUIRE(drive->motor_2 == atj::h0::MotorDriveDirection::off);
 }
+
+TEST_CASE("H0 servo coasts while merely armed") {
+    atj::h0::H0Device device(atj::h0::h0_safety_limits(), atj::h0::MotionAuthority::coordinated);
+
+    device.ingest_sample(initial_sample());
+
+    REQUIRE(device.handle_command({.sequence = 1, .type = atj::h0::CommandType::arm}) ==
+            atj::h0::CommandDisposition::accepted);
+
+    const auto servo = device.servo_output();
+
+    REQUIRE(servo.motor_1.mode == atj::h0::MotorServoMode::coast);
+    REQUIRE(servo.motor_2.mode == atj::h0::MotorServoMode::coast);
+}
+
+TEST_CASE("H0 servo drives coordianted move") {
+    atj::h0::H0Device device(atj::h0::h0_safety_limits(), atj::h0::MotionAuthority::coordinated);
+
+    device.ingest_sample(initial_sample());
+
+    REQUIRE(device.handle_command({.sequence = 1, .type = atj::h0::CommandType::arm}) ==
+            atj::h0::CommandDisposition::accepted);
+
+    REQUIRE(device.handle_command({.sequence = 2,
+                                   .type = atj::h0::CommandType::move,
+                                   .motor_1_target_winding_counts = -5,
+                                   .motor_2_target_winding_counts = 5}) ==
+            atj::h0::CommandDisposition::accepted);
+
+    const auto servo = device.servo_output();
+
+    REQUIRE(servo.motor_1.mode == atj::h0::MotorServoMode::unwind);
+    REQUIRE(servo.motor_2.mode == atj::h0::MotorServoMode::wind);
+}

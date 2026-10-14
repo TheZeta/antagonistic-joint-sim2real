@@ -10,8 +10,10 @@ extern "C" {
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <optional>
 #include <string>
+#include <string_view>
 
 namespace h0_firmware {
 
@@ -90,6 +92,12 @@ constexpr std::uint32_t i2c_timeout_ms = 100;
 constexpr std::size_t rx_buffer_size = 128;
 
 std::array<std::uint8_t, rx_buffer_size> rx_buffer{};
+
+constexpr std::size_t tx_buffer_size = 256;
+
+std::array<std::uint8_t, tx_buffer_size> tx_buffer{};
+
+volatile bool tx_busy = false;
 
 volatile std::size_t rx_head = 0;
 volatile std::size_t rx_tail = 0;
@@ -428,7 +436,140 @@ std::int32_t read_motor_2_encoder_count() {
     return motor_2_extended_count;
 }
 
+std::uint32_t compare_from_duty(std::uint32_t duty_percent) {
+    return pwm_period_counts * duty_percent / 100U;
+}
+
+bool apply_motor_1_servo(const atj::h0::MotorServoOutput& output) {
+    if (output.duty_percent > 100U) {
+        return false;
+    }
+
+    /*
+     * Establish a safe neutral bridge state first:
+     * both PWM channels LOW.
+     */
+    __HAL_TIM_SET_COMPARE(&motor_1_pwm_timer, TIM_CHANNEL_1, 0);
+    __HAL_TIM_SET_COMPARE(&motor_1_pwm_timer, TIM_CHANNEL_2, 0);
+
+    switch (output.mode) {
+    case atj::h0::MotorServoMode::coast:
+        /*
+         * True de-energized state.
+         */
+        HAL_GPIO_WritePin(GPIOB, GPIO_PIN_5, GPIO_PIN_RESET);
+
+        return true;
+
+    case atj::h0::MotorServoMode::brake:
+        /*
+         * Both PWM inputs LOW,
+         * bridge remains enabled.
+         *
+         * Motor terminals are electrically braked.
+         */
+        HAL_GPIO_WritePin(GPIOB, GPIO_PIN_5, GPIO_PIN_SET);
+
+        return true;
+
+    case atj::h0::MotorServoMode::wind:
+        /*
+         * M1 WIND = PA9 = TIM1_CH2.
+         */
+        __HAL_TIM_SET_COMPARE(&motor_1_pwm_timer, TIM_CHANNEL_2,
+                              compare_from_duty(output.duty_percent));
+
+        HAL_GPIO_WritePin(GPIOB, GPIO_PIN_5, GPIO_PIN_SET);
+
+        return true;
+
+    case atj::h0::MotorServoMode::unwind:
+        /*
+         * M1 UNWIND = PA8 = TIM1_CH1.
+         */
+        __HAL_TIM_SET_COMPARE(&motor_1_pwm_timer, TIM_CHANNEL_1,
+                              compare_from_duty(output.duty_percent));
+
+        HAL_GPIO_WritePin(GPIOB, GPIO_PIN_5, GPIO_PIN_SET);
+
+        return true;
+    }
+
+    return false;
+}
+
+bool apply_motor_2_servo(const atj::h0::MotorServoOutput& output) {
+    if (output.duty_percent > 100U) {
+        return false;
+    }
+
+    __HAL_TIM_SET_COMPARE(&motor_2_rpwm_timer, TIM_CHANNEL_2, 0);
+    __HAL_TIM_SET_COMPARE(&motor_2_lpwm_timer, TIM_CHANNEL_1, 0);
+
+    switch (output.mode) {
+    case atj::h0::MotorServoMode::coast:
+        /*
+         * True de-energized state.
+         */
+        HAL_GPIO_WritePin(GPIOA, GPIO_PIN_10, GPIO_PIN_RESET);
+
+        return true;
+
+    case atj::h0::MotorServoMode::brake:
+        /*
+         * Both PWM inputs LOW,
+         * bridge remains enabled.
+         *
+         * Motor terminals are electrically braked.
+         */
+        HAL_GPIO_WritePin(GPIOA, GPIO_PIN_10, GPIO_PIN_SET);
+
+        return true;
+
+    case atj::h0::MotorServoMode::wind:
+        /*
+         * M2 WIND = PC7 = TIM8_CH2.
+         */
+        __HAL_TIM_SET_COMPARE(&motor_2_rpwm_timer, TIM_CHANNEL_2,
+                              compare_from_duty(output.duty_percent));
+
+        HAL_GPIO_WritePin(GPIOA, GPIO_PIN_10, GPIO_PIN_SET);
+
+        return true;
+
+    case atj::h0::MotorServoMode::unwind:
+        /*
+         * M2 UNWIND = PB6 = TIM4_CH1.
+         */
+        __HAL_TIM_SET_COMPARE(&motor_2_lpwm_timer, TIM_CHANNEL_1,
+                              compare_from_duty(output.duty_percent));
+
+        HAL_GPIO_WritePin(GPIOA, GPIO_PIN_10, GPIO_PIN_SET);
+
+        return true;
+    }
+
+    return false;
+}
+
 } // namespace
+
+bool apply_servo_output(const atj::h0::DualMotorServoOutput& output) {
+    /*
+     * Validate both commands before touching either motor.
+     */
+    if (output.motor_1.duty_percent > 100U || output.motor_2.duty_percent > 100U) {
+        force_disable_drivers();
+        return false;
+    }
+
+    if (!apply_motor_1_servo(output.motor_1) || !apply_motor_2_servo(output.motor_2)) {
+        force_disable_drivers();
+        return false;
+    }
+
+    return true;
+}
 
 void start_command_receiver() {
     rx_head = 0;
@@ -459,53 +600,6 @@ void force_disable_drivers() {
      */
     HAL_GPIO_WritePin(GPIOB, GPIO_PIN_5, GPIO_PIN_RESET);
     HAL_GPIO_WritePin(GPIOA, GPIO_PIN_10, GPIO_PIN_RESET);
-}
-
-bool apply_drive_command(const atj::h0::MotorDriveCommand& command) {
-    /*
-     * Briefly remove authority while changing direction.
-     */
-    force_disable_drivers();
-
-    const bool motor_1_active = command.motor_1 != atj::h0::MotorDriveDirection::off;
-    const bool motor_2_active = command.motor_2 != atj::h0::MotorDriveDirection::off;
-
-    /*
-     * Motor 1 mapping confirmed during commissioning:
-     *
-     * WIND     -> PA9 / LPWM / TIM1_CH2
-     * UNWIND   -> PA8 / RPWM / TIM1_CH1
-     */
-    if (command.motor_1 == atj::h0::MotorDriveDirection::wind) {
-        __HAL_TIM_SET_COMPARE(&motor_1_pwm_timer, TIM_CHANNEL_2, drive_compare);
-    } else if (command.motor_1 == atj::h0::MotorDriveDirection::unwind) {
-        __HAL_TIM_SET_COMPARE(&motor_1_pwm_timer, TIM_CHANNEL_1, drive_compare);
-    }
-
-    /*
-     * Motor 2:
-     *
-     * WIND     -> PC7 / RPWM / TIM8_CH2
-     * UNWIND   -> PB6 / LPWM / TIM4_CH1
-     */
-    if (command.motor_2 == atj::h0::MotorDriveDirection::wind) {
-        __HAL_TIM_SET_COMPARE(&motor_2_rpwm_timer, TIM_CHANNEL_2, drive_compare);
-    } else if (command.motor_2 == atj::h0::MotorDriveDirection::unwind) {
-        __HAL_TIM_SET_COMPARE(&motor_2_lpwm_timer, TIM_CHANNEL_1, drive_compare);
-    }
-
-    /*
-     * Enable only after direction + duty have been set.
-     */
-    if (motor_1_active) {
-        HAL_GPIO_WritePin(GPIOB, GPIO_PIN_5, GPIO_PIN_SET);
-    }
-
-    if (motor_2_active) {
-        HAL_GPIO_WritePin(GPIOA, GPIO_PIN_10, GPIO_PIN_SET);
-    }
-
-    return true;
 }
 
 void initialize_board() {
@@ -591,21 +685,43 @@ std::optional<std::string> try_read_command_line() {
     return std::nullopt;
 }
 
-void write_serial_line(const std::string& line) {
-    if (line.empty()) {
+void write_serial_line(const std::string_view line) {
+    /*
+     * Telemetry is best-effort.
+     *
+     * Never stall the motor-control loop waiting for UART.
+     */
+    if (tx_busy) {
         return;
     }
 
-    auto* bytes = reinterpret_cast<std::uint8_t*>(const_cast<char*>(line.data()));
+    if (line.empty() || line.size() > tx_buffer.size()) {
+        return;
+    }
 
-    HAL_UART_Transmit(&huart2, bytes, static_cast<std::uint16_t>(line.size()), HAL_MAX_DELAY);
+    std::memcpy(tx_buffer.data(), line.data(), line.size());
+
+    tx_busy = true;
+
+    if (HAL_UART_Transmit_IT(&huart2, tx_buffer.data(), static_cast<std::uint16_t>(line.size())) !=
+        HAL_OK) {
+        tx_busy = false;
+    }
+}
+
+extern "C" void HAL_UART_TxCpltCallback(UART_HandleTypeDef* huart) {
+    if (huart != &huart2) {
+        return;
+    }
+
+    tx_busy = false;
 }
 
 void wait_for_next_cycle() {
     /*
      * Observation-only dry-run rate.
      */
-    HAL_Delay(8);
+    HAL_Delay(1);
 }
 
 extern "C" void USART2_IRQHandler() {

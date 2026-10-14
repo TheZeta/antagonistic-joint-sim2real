@@ -71,6 +71,7 @@ CPP_SOURCES = \
 ../../../../src/h0_calibration.cpp \
 ../../../../src/h0_coordinates.cpp \
 ../../../../src/h0_safety.cpp \
+../../../../src/h0_motor_controller.cpp \
 ../../../../src/h0_protocol.cpp \
 ../../../../src/h0_device.cpp
 

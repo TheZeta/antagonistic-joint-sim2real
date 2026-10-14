@@ -71,6 +71,9 @@ CommandDisposition H0Device::handle_command(const HostCommand& command) {
             return CommandDisposition::rejected_by_safety;
         }
 
+        motor_1_servo_.reset();
+        motor_2_servo_.reset();
+
         return CommandDisposition::accepted;
     }
 
@@ -82,6 +85,9 @@ CommandDisposition H0Device::handle_command(const HostCommand& command) {
         motor_1_target_winding_counts_ = 0;
         motor_2_target_winding_counts_ = 0;
 
+        motor_1_servo_.reset();
+        motor_2_servo_.reset();
+
         return CommandDisposition::accepted;
 
     case CommandType::clear_fault:
@@ -91,6 +97,9 @@ CommandDisposition H0Device::handle_command(const HostCommand& command) {
 
         motor_1_target_winding_counts_ = 0;
         motor_2_target_winding_counts_ = 0;
+
+        motor_1_servo_.reset();
+        motor_2_servo_.reset();
 
         return CommandDisposition::accepted;
 
@@ -141,6 +150,17 @@ std::optional<MotorDriveCommand> H0Device::drive_command() const {
 
     return motor_drive_command(motor_1_winding_counts(), motor_2_winding_counts(),
                                motor_1_target_winding_counts_, motor_2_target_winding_counts_);
+}
+
+DualMotorServoOutput H0Device::servo_output() {
+    const bool enabled = have_sample_ && baselines_valid_ && safety_.driver_enable_allowed();
+    const double time_s = have_sample_ ? static_cast<double>(raw_.time_us) * 1e-6 : 0.0;
+
+    return DualMotorServoOutput{
+        .motor_1 = motor_1_servo_.update(time_s, motor_1_winding_counts(),
+                                         motor_1_target_winding_counts_, enabled),
+        .motor_2 = motor_2_servo_.update(time_s, motor_2_winding_counts(),
+                                         motor_2_target_winding_counts_, enabled)};
 }
 
 TelemetryPacket H0Device::make_telemetry(bool driver_enabled) {

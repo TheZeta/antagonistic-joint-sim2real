@@ -68,6 +68,7 @@ add_executable(
     tests/test_h0_limits.cpp
     tests/test_h0_motor_servo.cpp
     tests/test_h0_telemetry.cpp
+    tests/test_h0_motor_controller.cpp
 )
 
 target_link_libraries(
@@ -319,6 +320,7 @@ add_library(
     src/h0_safety.cpp
     src/h0_protocol.cpp
     src/h0_device.cpp
+    src/h0_motor_controller.cpp
 )
 
 target_include_directories(

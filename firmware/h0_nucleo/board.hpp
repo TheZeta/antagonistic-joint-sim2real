@@ -1,9 +1,11 @@
 #pragma once
 
 #include "atj/h0_device.hpp"
+#include "atj/h0_motor_controller.hpp"
 
 #include <optional>
 #include <string>
+#include <string_view>
 
 namespace h0_firmware {
 
@@ -37,12 +39,12 @@ std::optional<atj::h0::RawHardwareSample> try_read_hardware_sample();
 std::optional<std::string> try_read_command_line();
 
 [[nodiscard]]
-bool apply_drive_command(const atj::h0::MotorDriveCommand& command);
+bool apply_servo_output(const atj::h0::DualMotorServoOutput& output);
 
 /*
  * Transmit one protocol line
  */
-void write_serial_line(const std::string& line);
+void write_serial_line(std::string_view line);
 
 /*
  * Maintain the chosen telemetry/control-loop period.

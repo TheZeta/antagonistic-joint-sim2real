@@ -1,5 +1,6 @@
 #pragma once
 
+#include "atj/h0_motor_controller.hpp"
 #include "atj/h0_motor_servo.hpp"
 #include "atj/h0_protocol.hpp"
 
@@ -28,6 +29,9 @@ enum class MotionAuthority { inhibited, coordinated };
 
 class H0Device {
   public:
+    [[nodiscard]]
+    DualMotorServoOutput servo_output();
+
     explicit H0Device(SafetyLimits limits,
                       MotionAuthority motion_authority = MotionAuthority::inhibited);
 
@@ -79,6 +83,9 @@ class H0Device {
 
     [[nodiscard]]
     std::int32_t motor_2_winding_counts() const;
+
+    MotorPositionServo motor_1_servo_{};
+    MotorPositionServo motor_2_servo_{};
 };
 
 /*
