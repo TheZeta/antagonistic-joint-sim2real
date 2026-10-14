@@ -3,6 +3,7 @@
 #include "atj/h0_protocol.hpp"
 #include "atj/h0_telemetry.hpp"
 
+#include <algorithm>
 #include <cerrno>
 #include <chrono>
 #include <csignal>
@@ -24,7 +25,15 @@ namespace {
 
 volatile std::sig_atomic_t keep_running = 1;
 
-constexpr std::int32_t default_preload_counts = 0;
+/*
+ * Empirical H0 experiment preload:
+ *
+ * Starting from the standardized ~90 deg spool pose
+ * beyond tangent entry, common-mode WIND of +100
+ * normalized counts on both motors produces
+ * approximately 10 mm spring preload.
+ */
+constexpr std::int32_t default_preload_counts = 100;
 
 void handle_signal(int) {
     keep_running = 0;
@@ -238,8 +247,8 @@ void dwell(int fd, std::ofstream& output, double duration_s) {
     }
 }
 
-void perform_move(int fd, std::ofstream& output, std::uint32_t& command_sequence,
-                  std::int32_t motor_1_target, std::int32_t motor_2_target) {
+void move_and_wait(int fd, std::ofstream& output, std::uint32_t& command_sequence,
+                   std::int32_t motor_1_target, std::int32_t motor_2_target) {
     std::cout << "MOVE " << motor_1_target << ", " << motor_2_target << '\n';
 
     send_command(fd, atj::h0::HostCommand{.sequence = command_sequence++,
@@ -248,11 +257,34 @@ void perform_move(int fd, std::ofstream& output, std::uint32_t& command_sequence
                                           .motor_2_target_winding_counts = motor_2_target});
 
     wait_for_state(fd, output, atj::h0::SafetyState::holding, 3.0);
+}
+
+void perform_measurement(int fd, std::ofstream& output, std::uint32_t& command_sequence,
+                         std::int32_t motor_1_target, std::int32_t motor_2_target) {
+    move_and_wait(fd, output, command_sequence, motor_1_target, motor_2_target);
 
     /*
-     * Characterization plateau.
+     * Quasi-static characterization dwell.
+     *
+     * The relaxation probe showed that 5 s is sufficient
+     * for H0 to approach its settled branch state.
      */
-    dwell(fd, output, 1.0);
+    dwell(fd, output, 5.0);
+}
+
+void ramp_common_preload(int fd, std::ofstream& output, std::uint32_t& command_sequence,
+                         std::int32_t preload_counts) {
+    constexpr std::int32_t step_counts = 5;
+
+    std::int32_t current = 0;
+
+    while (current < preload_counts) {
+        current = std::min(current + step_counts, preload_counts);
+
+        std::cout << "PRELOAD " << current << ", " << current << '\n';
+
+        move_and_wait(fd, output, command_sequence, current, current);
+    }
 }
 
 } // namespace
@@ -346,7 +378,10 @@ int main(int argc, char** argv) {
         if (preload_counts > 0) {
             std::cout << "PRELOAD " << preload_counts << ", " << preload_counts << '\n';
 
-            perform_move(fd, output, command_sequence, preload_counts, preload_counts);
+            ramp_common_preload(fd, output, command_sequence, preload_counts);
+            std::cout << "SETTLING AT PRELOAD\n";
+
+            dwell(fd, output, 5.0);
         } else {
             /*
              * Record the initial neutral condition even when no
@@ -355,13 +390,13 @@ int main(int argc, char** argv) {
             dwell(fd, output, 1.0);
         }
 
-        const std::vector<std::int32_t> differential_offsets{5,   10,  15,  20,
+        const std::vector<std::int32_t> differential_offsets{5,   10,  15,  20,  25,  30,
 
-                                                             15,  10,  5,   0,
+                                                             25,  20,  15,  10,  5,   0,
 
-                                                             -5,  -10, -15, -20,
+                                                             -5,  -10, -15, -20, -25, -30,
 
-                                                             -15, -10, -5,  0};
+                                                             -25, -20, -15, -10, -5,  0};
 
         for (const std::int32_t offset : differential_offsets) {
             /*
@@ -379,12 +414,12 @@ int main(int argc, char** argv) {
             const ::std::int32_t motor_1_target = preload_counts - offset;
             const ::std::int32_t motor_2_target = preload_counts + offset;
 
-            perform_move(fd, output, command_sequence, motor_1_target, motor_2_target);
+            perform_measurement(fd, output, command_sequence, motor_1_target, motor_2_target);
         }
 
         std::cout << "RETURN TO PRELOAD " << preload_counts << ", " << preload_counts << '\n';
 
-        perform_move(fd, output, command_sequence, preload_counts, preload_counts);
+        move_and_wait(fd, output, command_sequence, preload_counts, preload_counts);
 
         send_command(fd, {.sequence = command_sequence++, .type = atj::h0::CommandType::disable});
 
