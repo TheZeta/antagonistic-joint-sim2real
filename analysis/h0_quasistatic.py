@@ -5,6 +5,8 @@ import math
 import statistics
 import sys
 from pathlib import Path
+import matplotlib.pyplot as plt
+
 
 METERS_PER_COUNT = 0.023 / 201.0
 JOINT_RADIUS_M = 0.020
@@ -191,6 +193,90 @@ def classify_branches(plateaus):
 
         p["branch"] = branch
         previous_offset = offset
+
+
+def branch_points(plateaus, branch):
+    return sorted([(p["offset"], p["q_relative_deg"],) for p in plateaus if p["branch"] == branch], key=lambda point: point[0],)
+
+
+def hysteresis_points(plateaus, outward_branch, return_branch,):
+    outward = {
+        abs(p["offset"]): p["q_relative_deg"]
+        for p in plateaus
+        if p["branch"] == outward_branch
+    }
+
+    returning = {
+        abs(p["offset"]): p["q_relative_deg"]
+        for p in plateaus
+        if p["branch"] == return_branch
+    }
+
+    offsets = sorted(outward.keys() & returning.keys())
+
+    return [(offset, abs(returning[offset] - outward[offset]),) for offset in offsets]
+
+
+def plot_quasistatic_branches(plateaus, model_slope_deg_per_count, output_path,):
+    fig, ax = plt.subplots(figsize=(8, 6))
+
+    branch_specs = [
+        ("positive_outward", "Positive outward", "o-",),
+        ("positive_return", "Positive return", "s-",),
+        ("negative_outward", "Negative outward", "o-",),
+        ("negative_return", "Negative return", "s-",),
+    ]
+
+    for branch, label, style in branch_specs:
+        points = branch_points(plateaus, branch,)
+
+        xs = [point[0] for point in points]
+        ys = [point[1] for point in points]
+
+        ax.plot(xs, ys, style, label=label,)
+
+    max_offset = max(abs(p["offset"]) for p in plateaus)
+    model_x = [-max_offset, max_offset,]
+    model_y = [model_slope_deg_per_count * x for x in model_x]
+
+    ax.plot(model_x, model_y, "--", linewidth=2, label="Model v0",)
+    ax.set_xlabel("Differential offset [counts]")
+    ax.set_ylabel("Joint angle relative to initial preload [deg]")
+    ax.set_title("H0 quasi-static response vs Model v0")
+    ax.grid(True, alpha=0.3,)
+    ax.legend()
+
+    fig.tight_layout()
+    fig.savefig(output_path, dpi=200,)
+
+    plt.close(fig)
+
+
+def plot_hysteresis(plateaus, output_path,):
+    positive = hysteresis_points(plateaus, "positive_outward", "positive_return",)
+    negative = hysteresis_points(plateaus, "negative_outward", "negative_return",)
+
+    # Never silently produce a zero-hysteresis figure
+    # from accidental duplicate branch selections.
+
+    if not any(width > 0.1 for _, width in positive + negative):
+        raise RuntimeError("Hysteresis plot unexpectedly collapsed to zero; check branch selection")
+
+    fig, ax = plt.subplots(figsize=(8, 5))
+
+    ax.plot([p[0] for p in positive], [p[1] for p in positive], "o-", label="Positive side",)
+    ax.plot([p[0] for p in negative], [p[1] for p in negative], "s-", label="Negative side",)
+
+    ax.set_xlabel("|Differential offset| [counts]")
+    ax.set_ylabel("Hysteresis width [deg]")
+    ax.set_title("H0 quasi-static hysteresis")
+    ax.grid(True, alpha=0.3,)
+    ax.legend()
+
+    fig.tight_layout()
+    fig.savefig(output_path, dpi=200)
+
+    plt.close(fig)
 
 
 def main():
@@ -381,6 +467,17 @@ def main():
         "Plateau table written to:"
     )
     print(output_path)
+
+    branch_plot_path = (input_path.parent / "quasistatic_model_comparison.png")
+    hysteresis_plot_path = (input_path.parent / "quasistatic_hysteresis.png")
+
+    plot_quasistatic_branches(plateaus, model_slope_deg_per_count, branch_plot_path,)
+    plot_hysteresis(plateaus, hysteresis_plot_path,)
+
+    print()
+    print("Figures written to:")
+    print(branch_plot_path)
+    print(hysteresis_plot_path)
 
     return 0
 
