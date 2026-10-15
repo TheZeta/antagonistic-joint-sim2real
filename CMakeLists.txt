@@ -70,6 +70,7 @@ add_executable(
     tests/test_h0_telemetry.cpp
     tests/test_h0_motor_controller.cpp
     tests/test_h0_quasistatic_model.cpp
+    tests/test_h0_dynamic_model.cpp
 )
 
 target_link_libraries(
@@ -375,6 +376,25 @@ target_link_libraries(
 
 target_compile_options(
     h0_differential_sweep
+    PRIVATE
+    -Wall
+    -Wextra
+    -Wpedantic
+    -Wconversion
+)
+add_executable(
+    h0_dynamic_response
+    apps/h0_dynamic_response.cpp
+)
+
+target_link_libraries(
+    h0_dynamic_response
+    PRIVATE
+    atj_h0
+)
+
+target_compile_options(
+    h0_dynamic_response
     PRIVATE
     -Wall
     -Wextra
