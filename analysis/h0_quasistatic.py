@@ -6,6 +6,7 @@ import statistics
 import sys
 from pathlib import Path
 import matplotlib.pyplot as plt
+import numpy as np
 
 
 METERS_PER_COUNT = 0.023 / 201.0
@@ -279,6 +280,95 @@ def plot_hysteresis(plateaus, output_path,):
     plt.close(fig)
 
 
+def characterization_points(plateaus,):
+    valid_branches = {"positive_outward", "positive_return", "negative_outward", "negative_return"}
+
+    return [p for p in plateaus if p["branch"] in valid_branches]
+
+
+def motion_direction(branch):
+    # +1: differential offset increasing
+    # -1: differential offset decreasing
+
+    if branch in {"positive_outward", "negative_return",}:
+        return 1.0
+
+    if branch in {"positive_return", "negative_outward",}:
+        return -1.0
+
+    raise ValueError(f"No motion direction for {branch}")
+
+
+def rmse(actual, predicted):
+    error = actual - predicted
+
+    return math.sqrt(float(np.mean(error ** 2)))
+
+
+def compare_models(plateaus, nominal_slope,):
+    points = characterization_points(plateaus)
+
+    x = np.array([p["offset"] for p in points], dtype=float,)
+    y = np.array([p["q_relative_deg"] for p in points], dtype=float,)
+    direction = np.array([motion_direction(p["branch"]) for p in points], dtype=float,)
+
+    # Model 0:
+    # nominal geometry, no fitted parameters.
+    model_0_prediction = nominal_slope * x
+    model_0_rmse = rmse(y, model_0_prediction,)
+
+    # Model 1:
+    # one fitted gain, constrained through zero.
+    fitted_slope = float(np.dot(x, y) / np.dot(x, x))
+
+    model_1_prediction = fitted_slope * x
+    model_1_rmse = rmse(y, model_1_prediction,)
+
+    # Model 2:
+    #
+    # q = a*x + b + h*d
+    #
+    # d = +1 while differential target increases
+    # d = -1 while it decreases
+    design = np.column_stack((x, np.ones_like(x), direction,))
+    coefficients, _, _, _ = np.linalg.lstsq(design, y, rcond=None,)
+    slope = float(coefficients[0])
+    bias = float(coefficients[1])
+    direction_bias = float(coefficients[2])
+    model_2_prediction = design @ coefficients
+    model_2_rmse = rmse(y, model_2_prediction,)
+    effective_radius_m = METERS_PER_COUNT / math.radians(fitted_slope)
+
+    return {
+        "model_0_rmse":
+            model_0_rmse,
+
+        "model_1_slope":
+            fitted_slope,
+
+        "model_1_rmse":
+            model_1_rmse,
+
+        "effective_radius_mm":
+            effective_radius_m * 1000.0,
+
+        "model_2_slope":
+            slope,
+
+        "model_2_bias":
+            bias,
+
+        "model_2_direction_bias":
+            direction_bias,
+
+        "model_2_hysteresis_width":
+            2.0 * abs(direction_bias),
+
+        "model_2_rmse":
+            model_2_rmse,
+    }
+
+
 def main():
     if len(sys.argv) != 2:
         print(
@@ -478,6 +568,26 @@ def main():
     print("Figures written to:")
     print(branch_plot_path)
     print(hysteresis_plot_path)
+
+    comparison = compare_models(plateaus, model_slope_deg_per_count,)
+
+    print()
+    print("MODEL COMPARISON")
+    print("=" * 45)
+    print("Model 0 - nominal geometry:")
+    print(f"  RMSE = {comparison['model_0_rmse']:.3f} deg")
+    print()
+    print("Model 1 - fitted static gain:")
+    print(f"  slope = {comparison['model_1_slope']:.4f} deg/count")
+    print(f"  equivalent effective radius = {comparison['effective_radius_mm']:.2f} mm")
+    print(f"  RMSE = {comparison['model_1_rmse']:.3f} deg")
+    print()
+    print("Model 2 - gain + direction memory:")
+    print(f"  slope = {comparison['model_2_slope']:.4f} deg/count")
+    print(f"  bias = {comparison['model_2_bias']:+.3f} deg")
+    print(f"  direction bias = {comparison['model_2_direction_bias']:+.3f} deg")
+    print(f"  implied branch separation = {comparison['model_2_hysteresis_width']:.3f} deg")
+    print(f"  RMSE = {comparison['model_2_rmse']:.3f} deg")
 
     return 0
 

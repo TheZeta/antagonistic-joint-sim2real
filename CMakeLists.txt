@@ -69,6 +69,7 @@ add_executable(
     tests/test_h0_motor_servo.cpp
     tests/test_h0_telemetry.cpp
     tests/test_h0_motor_controller.cpp
+    tests/test_h0_quasistatic_model.cpp
 )
 
 target_link_libraries(
