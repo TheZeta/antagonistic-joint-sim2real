@@ -71,6 +71,7 @@ add_executable(
     tests/test_h0_motor_controller.cpp
     tests/test_h0_quasistatic_model.cpp
     tests/test_h0_dynamic_model.cpp
+    tests/test_h0_model_v1.cpp
 )
 
 target_link_libraries(
