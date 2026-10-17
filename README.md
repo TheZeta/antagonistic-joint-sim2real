@@ -50,6 +50,14 @@ The complete H0 mechanical assembly is available as a STEP model:
 The file contains the assembled hardware geometry used for the realized
 H0 platform.
 
+### Hardware demo
+
+A short demonstration of the realized H0 joint executing commanded motion:
+
+![H0 movement demo](media/move_demo.gif)
+
+Original video file: [move_demo.mp4](media/move_demo.mp4)
+
 ## Model progression
 
 ### Model v0
