@@ -362,6 +362,25 @@ def analyze_case(
         dpi=200,
     )
 
+    trajectory_plot_path = (output_dir / f"sim2real_{name}_trajectory.png")
+
+    fig, ax = plt.subplots(figsize=(10, 5.5))
+
+    steps = [r["step"] for r in records]
+
+    ax.plot(steps, [r["h0_q_deg"] for r in records], "o-", label="Measured H0",)
+    ax.plot(steps, [r["model_v0_q_deg"] for r in records], "--", linewidth=2, label="Model v0",)
+    ax.plot(steps, [r["model_v1_q_deg"] for r in records], "s-", label="Model v1",)
+
+    ax.set_xlabel("Experiment step")
+    ax.set_ylabel("Joint angle relative to initial preload [deg]")
+    ax.set_title(f"H0 sim-to-real trajectory: {name}")
+
+    ax.grid(True, alpha=0.3,)
+    ax.legend()
+    fig.tight_layout()
+    fig.savefig(trajectory_plot_path, dpi=200,)
+
     plt.close(fig)
 
     return {
@@ -384,6 +403,9 @@ def analyze_case(
 
         "plot":
             plot_path,
+
+        "trajectory_plot":
+            trajectory_plot_path,
     }
 
 
@@ -465,6 +487,14 @@ def main():
 
     print(
         minor["plot"]
+    )
+
+    print(
+        quasistatic["trajectory_plot"]
+    )
+
+    print(
+        minor["trajectory_plot"]
     )
 
     return 0
