@@ -72,6 +72,7 @@ add_executable(
     tests/test_h0_quasistatic_model.cpp
     tests/test_h0_dynamic_model.cpp
     tests/test_h0_model_v1.cpp
+    tests/test_h0_experiment_schedule.cpp
 )
 
 target_link_libraries(
@@ -416,6 +417,25 @@ target_link_libraries(
 
 target_compile_options(
     h0_minor_loop
+    PRIVATE
+    -Wall
+    -Wextra
+    -Wpedantic
+    -Wconversion
+)
+add_executable(
+    h0_model_batch
+    apps/h0_model_batch.cpp
+)
+
+target_link_libraries(
+    h0_model_batch
+    PRIVATE
+    atj_h0
+)
+
+target_compile_options(
+    h0_model_batch
     PRIVATE
     -Wall
     -Wextra

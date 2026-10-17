@@ -1,4 +1,5 @@
 #include "atj/h0_calibration.hpp"
+#include "atj/h0_experiment_schedule.hpp"
 #include "atj/h0_limits.hpp"
 #include "atj/h0_protocol.hpp"
 #include "atj/h0_telemetry.hpp"
@@ -269,7 +270,7 @@ void perform_measurement(int fd, std::ofstream& output, std::uint32_t& command_s
      * The relaxation probe showed that 5 s is sufficient
      * for H0 to approach its settled branch state.
      */
-    dwell(fd, output, 5.0);
+    dwell(fd, output, atj::h0::quasistatic_dwell_s);
 }
 
 void ramp_common_preload(int fd, std::ofstream& output, std::uint32_t& command_sequence,
@@ -390,15 +391,7 @@ int main(int argc, char** argv) {
             dwell(fd, output, 1.0);
         }
 
-        const std::vector<std::int32_t> differential_offsets{5,   10,  15,  20,  25,  30,
-
-                                                             25,  20,  15,  10,  5,   0,
-
-                                                             -5,  -10, -15, -20, -25, -30,
-
-                                                             -25, -20, -15, -10, -5,  0};
-
-        for (const std::int32_t offset : differential_offsets) {
+        for (const std::int32_t offset : atj::h0::quasistatic_offsets) {
             /*
              * Our established differential convention:
              *
