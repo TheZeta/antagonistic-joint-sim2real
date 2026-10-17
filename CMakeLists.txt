@@ -402,3 +402,23 @@ target_compile_options(
     -Wpedantic
     -Wconversion
 )
+
+add_executable(
+    h0_minor_loop
+    apps/h0_minor_loop.cpp
+)
+
+target_link_libraries(
+    h0_minor_loop
+    PRIVATE
+    atj_h0
+)
+
+target_compile_options(
+    h0_minor_loop
+    PRIVATE
+    -Wall
+    -Wextra
+    -Wpedantic
+    -Wconversion
+)
