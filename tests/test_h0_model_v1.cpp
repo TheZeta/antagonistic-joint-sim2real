@@ -69,3 +69,67 @@ TEST_CASE("H0 Model v1 can infer initial memory from equilibrium") {
     REQUIRE(model.memory_state() == Catch::Approx(-0.297).margin(0.002));
     REQUIRE(model.equilibrium_deg(0.0) == Catch::Approx(0.0).margin(0.001));
 }
+
+TEST_CASE("H0 Movel v1 reproduces positive minor reversal state") {
+    atj::h0::ModelV1 model;
+
+    /*
+     * Experimental normalization:
+     *
+     * x = 0
+     * q = 0
+     *
+     * Infer the corresponding initial memory.
+     */
+    model.reset_from_equilibrium(0.0, 0.0);
+
+    /*
+     * Follow the exact positive minor-loop approach:
+     *
+     * 0 -> 5 -> 10 -> 15 -> 20 -> 18
+     *
+     * dt = 0 because this test concerns the
+     * displacement-driven hysteresis state only.
+     */
+    model.update_deg(0.0, 5.0);
+    model.update_deg(0.0, 10.0);
+    model.update_deg(0.0, 15.0);
+    model.update_deg(0.0, 20.0);
+    model.update_deg(0.0, 18.0);
+
+    REQUIRE(model.memory_state() == Catch::Approx(0.091).margin(0.003));
+    REQUIRE(model.equilibrium_deg(18.0) == Catch::Approx(4.707).margin(0.01));
+}
+
+TEST_CASE("H0 Model v1 reproduces negative minor reversal state") {
+    atj::h0::ModelV1 model;
+
+    model.reset_from_equilibrium(0.0, 0.0);
+
+    /*
+     * First drive positive memory to saturation,
+     * then traverse through zero to the negative side,
+     * matching the experiment.
+     */
+    model.update_deg(0.0, 5.0);
+    model.update_deg(0.0, 10.0);
+    model.update_deg(0.0, 15.0);
+    model.update_deg(0.0, 20.0);
+
+    model.update_deg(0.0, 18.0);
+    model.update_deg(0.0, 20.0);
+
+    model.update_deg(0.0, 15.0);
+    model.update_deg(0.0, 10.0);
+    model.update_deg(0.0, 5.0);
+    model.update_deg(0.0, 0.0);
+    model.update_deg(0.0, -5.0);
+    model.update_deg(0.0, -10.0);
+    model.update_deg(0.0, -15.0);
+    model.update_deg(0.0, -20.0);
+
+    model.update_deg(0.0, -18.0);
+
+    REQUIRE(model.memory_state() == Catch::Approx(-0.093).margin(0.003));
+    REQUIRE(model.equilibrium_deg(-18.0) == Catch::Approx(-5.273).margin(0.01));
+}
