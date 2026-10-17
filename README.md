@@ -11,6 +11,11 @@ hysteresis, partial reversals, and relaxation.
 The repository also includes the complete mechanical assembly as a
 STEP CAD model.
 
+## Technical report
+
+The complete H0 characterization, model-identification, and sim-to-real
+validation study is available in the [technical report](docs/H0_Sim2Real_Project_Report.pdf).
+
 ## Key result
 
 The original memoryless model exhibits substantial prediction error
