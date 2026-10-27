@@ -77,9 +77,7 @@ $$
 The joint dynamics can therefore be written as
 
 $$
-I\ddot{q} + b\dot{q} + 2kr_j^2 q
-=
-kr_jr_m\theta_d.
+I\ddot{q} + b\dot{q} + 2kr_j^2 q = kr_jr_m\theta_d.
 $$
 
 Under the symmetric linear-spring assumptions of Model v0, only the differential input $\theta_d$ affects the joint motion.
@@ -151,16 +149,7 @@ $$
 Substituting the tendon forces,
 
 $$
-I\ddot{q}
-=
-r_j
-\left[
-k(\delta_0+r_m\theta_1-r_jq)
--
-k(\delta_0+r_m\theta_2+r_jq)
-\right]
--
-b\dot{q}.
+I\ddot{q} = r_j \left[k(\delta_0+r_m\theta_1-r_jq) - k(\delta_0+r_m\theta_2+r_jq) \right] - b\dot{q}.
 $$
 
 After simplification,
